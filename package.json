@@ -1,0 +1,25 @@
+{
+  "name": "videoai",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-router-dom": "^7.6.2",
+    "lucide-react": "^0.511.0",
+    "express": "^5.1.0",
+    "cookie-parser": "^1.4.7",
+    "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.1",
+    "vite": "^8.0.12"
+  }
+}
