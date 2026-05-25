@@ -99,7 +99,7 @@ img, video { max-width: 100%; display: block; }
   border: none;
   border-radius: 12px;
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease, border-color 180ms ease;
   white-space: nowrap;
   text-decoration: none;
   position: relative;
@@ -118,15 +118,15 @@ img, video { max-width: 100%; display: block; }
 .btn-primary {
   background: linear-gradient(135deg, #10B981 0%, #059669 100%);
   color: #FFFFFF;
-  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3), inset 0 1px 0 rgba(255,255,255,0.15);
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3), 0 0 0 0 rgba(16,185,129,0), inset 0 1px 0 rgba(255,255,255,0.15);
 }
 .btn-primary:hover:not(:disabled) {
-  box-shadow: 0 8px 32px rgba(16, 185, 129, 0.4), inset 0 1px 0 rgba(255,255,255,0.15);
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 32px rgba(16, 185, 129, 0.45), 0 0 20px rgba(16,185,129,0.2), inset 0 1px 0 rgba(255,255,255,0.2);
 }
 .btn-primary:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: 0 2px 12px rgba(16, 185, 129, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 14px rgba(16, 185, 129, 0.35), inset 0 1px 0 rgba(255,255,255,0.15);
 }
 
 .btn-dark {
@@ -153,15 +153,21 @@ img, video { max-width: 100%; display: block; }
 }
 
 .btn-ghost {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
   color: #FFFFFF;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 .btn-ghost:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+}
+.btn-ghost:active:not(:disabled) {
   transform: translateY(-1px);
+  box-shadow: 0 3px 12px rgba(0,0,0,0.2);
 }
 
 /* ====== FORMS ====== */
@@ -322,6 +328,10 @@ img, video { max-width: 100%; display: block; }
 
   .mockup-right { display: none !important; }
   .steps-connector { display: none !important; }
+
+  /* Hero responsive — stack columns */
+  .hero-grid { flex-direction: column !important; }
+  .hero-grid > * { flex: 1 1 100% !important; max-width: 100% !important; }
 }
 
 /* Bento grid responsive */

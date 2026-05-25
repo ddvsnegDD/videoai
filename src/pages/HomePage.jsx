@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Play, Sparkles, Share2, ChevronDown, Check, Zap, Video,
   MessageSquare, Mic, Layout, Clock, Globe, ArrowRight,
-  Wand2, Film, Send,
+  Wand2, Film, Send, Image, Volume2, Upload,
 } from 'lucide-react';
 import { C } from '../lib/theme.js';
 import { tariffs } from '../data/tariffs.js';
@@ -43,81 +43,114 @@ export default function HomePage() {
   );
 }
 
-/* ====== HERO ====== */
+/* ====== HERO — LIGHT, TEXT LEFT + MOCKUP RIGHT ====== */
 function Hero() {
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setLoaded(true), 100); return () => clearTimeout(t); }, []);
+
   return (
     <section style={{
       position: 'relative',
       minHeight: '100vh',
       display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'center',
-      background: `radial-gradient(ellipse 80% 60% at 50% 0%, ${C.darkPine} 0%, ${C.dark} 70%)`,
+      alignItems: 'center',
       overflow: 'hidden',
+      background: '#F4F7F5',
       paddingTop: 72,
     }}>
-      {/* Ambient glow */}
+      {/* === LAYERED LIGHT BACKGROUND === */}
+      {/* Base warm gradient */}
       <div style={{
-        position: 'absolute', top: '-20%', left: '50%', transform: 'translateX(-50%)',
-        width: '140%', height: '60%',
-        background: 'radial-gradient(ellipse, rgba(16,185,129,0.08) 0%, transparent 70%)',
+        position: 'absolute', inset: 0,
+        background: 'linear-gradient(135deg, #F0F5F2 0%, #E8F0EC 30%, #F4F7F5 60%, #EDF5F0 100%)',
         pointerEvents: 'none',
       }} />
+      {/* Soft emerald glow top-right */}
       <div style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0, height: 200,
-        background: 'linear-gradient(to top, rgba(10,31,22,0.6), transparent)',
+        position: 'absolute', top: '-10%', right: '-5%',
+        width: '60%', height: '80%',
+        background: 'radial-gradient(ellipse 70% 60% at 60% 30%, rgba(16,185,129,0.07) 0%, rgba(16,185,129,0.02) 50%, transparent 70%)',
         pointerEvents: 'none',
       }} />
+      {/* Warm glow bottom-left */}
+      <div style={{
+        position: 'absolute', bottom: '-10%', left: '-5%',
+        width: '50%', height: '60%',
+        background: 'radial-gradient(ellipse 60% 50% at 40% 60%, rgba(16,185,129,0.04) 0%, transparent 70%)',
+        pointerEvents: 'none',
+      }} />
+      {/* Subtle geometric pattern overlay (top-right) */}
+      <div style={{
+        position: 'absolute', top: 0, right: 0,
+        width: '45%', height: '60%',
+        opacity: 0.04,
+        backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 5L55 17.5V42.5L30 55L5 42.5V17.5L30 5Z' fill='none' stroke='%2310B981' stroke-width='0.5'/%3E%3C/svg%3E")`,
+        backgroundSize: '60px 60px',
+        pointerEvents: 'none',
+      }} />
+      {/* Bottom gradient fade to white */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0, height: 120,
+        background: 'linear-gradient(to top, #FFFFFF 0%, transparent 100%)',
+        pointerEvents: 'none',
+        zIndex: 1,
+      }} />
 
-      <div className="container-lg" style={{ position: 'relative', zIndex: 2, padding: '60px 24px 48px' }}>
-        <div style={{ textAlign: 'center', maxWidth: 800, margin: '0 auto', marginBottom: 56 }}>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            background: 'rgba(16, 185, 129, 0.1)',
-            border: '1px solid rgba(16, 185, 129, 0.2)',
-            color: C.primary,
-            padding: '8px 18px', borderRadius: 100,
-            fontSize: '0.8125rem', fontWeight: 600,
-            marginBottom: 28, letterSpacing: '0.02em',
-          }}>
-            <Sparkles size={14} />
-            AI-платформа для создания видео
-          </div>
-
+      {/* === CONTENT === */}
+      <div className="container-lg hero-grid" style={{
+        position: 'relative', zIndex: 2,
+        display: 'flex', alignItems: 'center', gap: 48,
+        padding: '60px 24px 80px',
+      }}>
+        {/* LEFT — Text */}
+        <div style={{
+          flex: '0 0 45%', maxWidth: 520,
+          opacity: loaded ? 1 : 0,
+          transform: loaded ? 'translateY(0)' : 'translateY(24px)',
+          transition: 'all 0.8s cubic-bezier(0.4, 0, 0.2, 1) 0.15s',
+        }}>
           <h1 style={{
             fontFamily: "'Manrope', sans-serif",
-            fontSize: 'clamp(2.25rem, 5.5vw, 4rem)',
-            fontWeight: 800, lineHeight: 1.08,
-            color: C.white, letterSpacing: '-0.03em',
+            fontSize: 'clamp(2.2rem, 4.5vw, 3.5rem)',
+            fontWeight: 800, lineHeight: 1.1,
+            color: C.dark, letterSpacing: '-0.03em',
             marginBottom: 24,
           }}>
-            От идеи до готового
+            Идея <span style={{ color: C.primary }}>&rarr;</span> AI&#8209;видео
             <br />
-            <span style={{
-              background: 'linear-gradient(135deg, #10B981, #34D399)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-            }}>AI-видео</span> — за минуты
+            <span style={{ color: C.primary }}>&rarr;</span> публикация
+            <br />
+            за минуты
           </h1>
 
           <p style={{
-            fontSize: 'clamp(1rem, 2vw, 1.2rem)',
-            color: 'rgba(255,255,255,0.55)',
-            maxWidth: 540, margin: '0 auto 40px',
-            lineHeight: 1.7,
+            fontSize: '1.0625rem',
+            color: C.gray500,
+            lineHeight: 1.7, marginBottom: 36,
+            maxWidth: 420,
           }}>
-            Опишите идею, получите сценарий, озвучку и готовый ролик
-            для VK, Telegram и других площадок — без сложного монтажа.
+            Опишите идею, получите сценарий, озвучку
+            и готовый ролик для VK, Telegram и других
+            площадок — без сложного монтажа.
           </p>
 
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <div style={{
+            display: 'flex', gap: 14, flexWrap: 'wrap',
+          }}>
             <Link to="/login"><Btn variant="primary" size="lg">Начать бесплатно</Btn></Link>
-            <a href="#how"><Btn variant="ghost" size="lg">Как это работает</Btn></a>
+            <a href="#how"><Btn variant="outline" size="lg">Посмотреть демо</Btn></a>
           </div>
         </div>
 
-        {/* Product Mockup */}
-        <ProductMockup />
+        {/* RIGHT — Product Mockup */}
+        <div style={{
+          flex: 1, minWidth: 0,
+          opacity: loaded ? 1 : 0,
+          transform: loaded ? 'translateY(0) scale(1)' : 'translateY(32px) scale(0.97)',
+          transition: 'all 0.9s cubic-bezier(0.4, 0, 0.2, 1) 0.4s',
+        }}>
+          <ProductMockup />
+        </div>
       </div>
     </section>
   );
@@ -126,180 +159,255 @@ function Hero() {
 function ProductMockup() {
   return (
     <div style={{
-      maxWidth: 960, margin: '0 auto',
+      position: 'relative',
       borderRadius: 20,
-      background: 'rgba(17, 41, 34, 0.6)',
-      border: '1px solid rgba(16, 185, 129, 0.12)',
-      backdropFilter: 'blur(20px)',
-      boxShadow: '0 32px 80px rgba(0,0,0,0.3), 0 0 60px rgba(16,185,129,0.08)',
+      background: C.white,
+      border: `1px solid ${C.gray200}`,
+      boxShadow: '0 20px 60px rgba(10,31,22,0.08), 0 8px 24px rgba(10,31,22,0.04)',
       overflow: 'hidden',
     }}>
       {/* Window chrome */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        padding: '14px 20px',
-        background: 'rgba(10, 31, 22, 0.5)',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        padding: '12px 18px',
+        background: C.bg,
+        borderBottom: `1px solid ${C.gray200}`,
       }}>
-        <div style={{ display: 'flex', gap: 7 }}>
+        <div style={{ display: 'flex', gap: 6 }}>
           {['#FF5F57', '#FEBC2E', '#28C840'].map(c => (
-            <div key={c} style={{ width: 11, height: 11, borderRadius: '50%', background: c, opacity: 0.8 }} />
+            <div key={c} style={{ width: 10, height: 10, borderRadius: '50%', background: c, opacity: 0.8 }} />
           ))}
         </div>
         <div style={{
-          flex: 1, textAlign: 'center', fontSize: '0.75rem',
-          color: 'rgba(255,255,255,0.3)', letterSpacing: '0.02em',
+          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
         }}>
-          VideoAI — Редактор
+          <div style={{
+            background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 8,
+            padding: '4px 16px', fontSize: '0.6875rem', color: C.gray400,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: C.primary, opacity: 0.6 }} />
+            ai.videoai.ru/studio
+          </div>
         </div>
+        <div style={{ width: 48 }} />
       </div>
 
-      {/* Product UI */}
-      <div style={{ padding: 24, display: 'flex', gap: 20, minHeight: 340 }}>
-        {/* Left: prompt & templates */}
-        <div style={{ flex: '0 0 280px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{
-            background: 'rgba(255,255,255,0.04)', borderRadius: 14,
-            border: '1px solid rgba(255,255,255,0.06)', padding: 16,
-          }}>
-            <div style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.35)', fontWeight: 600, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Промпт
+      {/* Product UI — 3-column layout */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '220px 1fr 200px',
+        minHeight: 360,
+      }}>
+        {/* LEFT PANEL — Prompt */}
+        <div style={{
+          borderRight: `1px solid ${C.gray100}`,
+          padding: 16,
+          display: 'flex', flexDirection: 'column', gap: 14,
+          background: C.offWhite,
+        }}>
+          <div>
+            <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: C.primary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Sparkles size={12} /> Prompt Panel
             </div>
             <div style={{
-              background: 'rgba(255,255,255,0.06)', borderRadius: 10,
-              padding: '12px 14px', fontSize: '0.8125rem',
-              color: 'rgba(255,255,255,0.7)', lineHeight: 1.5,
-              border: '1px solid rgba(16,185,129,0.15)',
+              background: C.white, borderRadius: 10,
+              padding: 12, fontSize: '0.75rem',
+              color: C.gray600, lineHeight: 1.5,
+              border: `1px solid ${C.gray200}`,
+              minHeight: 56,
             }}>
-              Тыквенный латте, осень, уютная кофейня, аромат корицы ✨
+              Ролик о запуске кроссовок в futuristic city
             </div>
           </div>
 
+          {/* Generate button */}
           <div style={{
-            background: 'rgba(255,255,255,0.04)', borderRadius: 14,
-            border: '1px solid rgba(255,255,255,0.06)', padding: 16,
+            padding: '10px 16px', borderRadius: 10,
+            background: `linear-gradient(135deg, ${C.primary} 0%, ${C.primaryDark} 100%)`,
+            color: C.white, fontSize: '0.75rem', fontWeight: 600,
+            textAlign: 'center', cursor: 'default',
+            boxShadow: '0 2px 8px rgba(16,185,129,0.25)',
           }}>
-            <div style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.35)', fontWeight: 600, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Шаблон
-            </div>
-            {['Анонс товара', 'Сторителлинг', 'Цитата дня'].map((t, i) => (
-              <div key={t} style={{
-                padding: '9px 12px', borderRadius: 8, marginBottom: 6,
-                fontSize: '0.8125rem', fontWeight: 500, cursor: 'default',
-                background: i === 0 ? 'rgba(16,185,129,0.15)' : 'transparent',
-                color: i === 0 ? C.primary : 'rgba(255,255,255,0.45)',
-                border: i === 0 ? `1px solid rgba(16,185,129,0.25)` : '1px solid transparent',
-              }}>{t}</div>
-            ))}
+            Генерация...
           </div>
 
-          <div style={{
-            display: 'flex', gap: 8, fontSize: '0.75rem', color: 'rgba(255,255,255,0.35)',
-          }}>
-            {['9:16', '16:9', '1:1'].map((f, i) => (
-              <div key={f} style={{
-                padding: '6px 14px', borderRadius: 8,
-                background: i === 0 ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.04)',
-                color: i === 0 ? C.primary : 'rgba(255,255,255,0.35)',
-                border: `1px solid ${i === 0 ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.06)'}`,
-                fontWeight: 600, fontSize: '0.6875rem',
-              }}>{f}</div>
-            ))}
+          {/* Generated images */}
+          <div>
+            <div style={{ fontSize: '0.625rem', fontWeight: 600, color: C.gray400, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Generated scenes
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+              {[
+                `linear-gradient(135deg, #1a3a2a 0%, #0d2b1e 50%, rgba(16,185,129,0.3) 100%)`,
+                `linear-gradient(135deg, #2a1a3a 0%, #1e0d2b 50%, rgba(129,16,185,0.3) 100%)`,
+                `linear-gradient(135deg, #3a2a1a 0%, #2b1e0d 50%, rgba(185,129,16,0.3) 100%)`,
+                `linear-gradient(135deg, #1a2a3a 0%, #0d1e2b 50%, rgba(16,129,185,0.3) 100%)`,
+              ].map((bg, i) => (
+                <div key={i} style={{
+                  height: 52, borderRadius: 8,
+                  background: bg,
+                  border: i === 0 ? `2px solid ${C.primary}` : `1px solid ${C.gray200}`,
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}>
+                  {i === 0 && (
+                    <div style={{
+                      position: 'absolute', top: 3, right: 3,
+                      width: 14, height: 14, borderRadius: 4,
+                      background: C.primary,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <Check size={8} color={C.white} strokeWidth={3} />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Center: preview */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* CENTER — Video Preview */}
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: C.dark, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Film size={12} /> Генерация...
+          </div>
           <div style={{
             flex: 1, borderRadius: 14,
-            background: 'linear-gradient(145deg, rgba(16,185,129,0.06) 0%, rgba(10,31,22,0.4) 100%)',
-            border: '1px solid rgba(255,255,255,0.06)',
+            background: 'linear-gradient(145deg, #0F2E21 0%, #0A1F16 60%, #0D2B1E 100%)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            position: 'relative', overflow: 'hidden', minHeight: 200,
+            position: 'relative', overflow: 'hidden',
+            minHeight: 220,
           }}>
+            {/* Cinematic scene preview */}
             <div style={{
               position: 'absolute', inset: 0,
-              background: 'radial-gradient(circle at 50% 60%, rgba(16,185,129,0.08) 0%, transparent 60%)',
+              background: 'radial-gradient(circle at 50% 45%, rgba(16,185,129,0.12) 0%, transparent 60%)',
+            }} />
+            <div style={{
+              position: 'absolute', inset: 0,
+              background: 'radial-gradient(circle at 30% 70%, rgba(185,129,16,0.08) 0%, transparent 50%)',
+            }} />
+            {/* City silhouette placeholder */}
+            <div style={{
+              position: 'absolute', bottom: 0, left: 0, right: 0, height: '40%',
+              background: 'linear-gradient(to top, rgba(16,185,129,0.08), transparent)',
             }} />
             <div style={{
               width: 56, height: 56, borderRadius: '50%',
-              background: 'rgba(16,185,129,0.2)', border: '2px solid rgba(16,185,129,0.4)',
+              background: 'rgba(255,255,255,0.1)', border: '2px solid rgba(255,255,255,0.25)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 0 32px rgba(16,185,129,0.2)',
+              backdropFilter: 'blur(8px)',
+              boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
             }}>
-              <Play size={22} color={C.primary} fill={C.primary} style={{ marginLeft: 2 }} />
+              <Play size={22} color="#fff" fill="#fff" style={{ marginLeft: 2 }} />
             </div>
+            {/* Duration badge */}
             <div style={{
-              position: 'absolute', bottom: 12, left: 14, right: 14,
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              position: 'absolute', top: 10, right: 10,
+              background: 'rgba(0,0,0,0.4)', borderRadius: 6,
+              padding: '3px 8px', fontSize: '0.5625rem', color: 'rgba(255,255,255,0.7)',
+              backdropFilter: 'blur(8px)',
             }}>
-              <span style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.3)' }}>00:00 / 00:30</span>
-              <div style={{
-                flex: 1, height: 3, borderRadius: 2, margin: '0 12px',
-                background: 'rgba(255,255,255,0.08)',
-                position: 'relative', overflow: 'hidden',
-              }}>
-                <div style={{
-                  position: 'absolute', left: 0, top: 0, bottom: 0, width: '65%',
-                  borderRadius: 2,
-                  background: `linear-gradient(90deg, ${C.primary}, ${C.primaryDark})`,
-                }} />
-              </div>
-              <span style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.3)' }}>9:16</span>
+              00:30
             </div>
           </div>
 
-          {/* Scene thumbnails */}
-          <div style={{ display: 'flex', gap: 8 }}>
-            {[1, 2, 3, 4].map(i => (
+          {/* Scene timeline */}
+          <div style={{ display: 'flex', gap: 6 }}>
+            {['Сцена 1', 'Сцена 2', 'Сцена 3', 'Сцена 4', 'Сцена 5'].map((s, i) => (
               <div key={i} style={{
-                flex: 1, height: 48, borderRadius: 8,
-                background: i === 1
-                  ? 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(16,185,129,0.05))'
-                  : 'rgba(255,255,255,0.03)',
-                border: i === 1 ? '1px solid rgba(16,185,129,0.25)' : '1px solid rgba(255,255,255,0.05)',
+                flex: 1, height: 40, borderRadius: 8,
+                background: i === 0
+                  ? `linear-gradient(135deg, rgba(16,185,129,0.12), rgba(16,185,129,0.04))`
+                  : i < 3 ? C.gray100 : C.offWhite,
+                border: i === 0 ? `1.5px solid ${C.primary}` : `1px solid ${C.gray200}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '0.625rem', color: 'rgba(255,255,255,0.25)', fontWeight: 600,
-              }}>Сцена {i}</div>
+                fontSize: '0.5625rem', color: i === 0 ? C.primary : C.gray400, fontWeight: 600,
+              }}>{s}</div>
             ))}
           </div>
         </div>
 
-        {/* Right: status */}
-        <div className="mockup-right" style={{ flex: '0 0 200px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {[
-            { icon: Wand2, label: 'Сценарий', status: 'Готов', done: true },
-            { icon: Film, label: 'Визуал', status: 'Готов', done: true },
-            { icon: Mic, label: 'Озвучка', status: 'Генерация...', done: false },
-            { icon: Send, label: 'Публикация', status: 'Ожидание', done: false },
-          ].map((s, i) => (
-            <div key={i} style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '10px 14px', borderRadius: 10,
-              background: s.done ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)',
-              border: `1px solid ${s.done ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.05)'}`,
-            }}>
-              <s.icon size={15} color={s.done ? C.primary : 'rgba(255,255,255,0.25)'} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{s.label}</div>
-                <div style={{
-                  fontSize: '0.625rem',
-                  color: s.done ? C.primary : 'rgba(255,255,255,0.3)',
-                  fontWeight: 500,
-                }}>{s.status}</div>
-              </div>
-              {s.done && <Check size={14} color={C.primary} />}
+        {/* RIGHT PANEL — Voiceover + Export */}
+        <div className="mockup-right" style={{
+          borderLeft: `1px solid ${C.gray100}`,
+          padding: 16,
+          display: 'flex', flexDirection: 'column', gap: 14,
+          background: C.offWhite,
+        }}>
+          {/* Voiceover */}
+          <div>
+            <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: C.dark, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Volume2 size={12} /> Voiceover
             </div>
-          ))}
+            {[
+              { name: 'Татьяна', active: true },
+              { name: 'Максим', active: false },
+            ].map((v, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 10px', borderRadius: 8, marginBottom: 6,
+                background: v.active ? C.primaryLight : C.white,
+                border: `1px solid ${v.active ? 'rgba(16,185,129,0.2)' : C.gray200}`,
+              }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: '50%',
+                  background: v.active ? C.primary : C.gray300,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Mic size={12} color={C.white} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: C.dark }}>{v.name}</div>
+                </div>
+                {/* Waveform placeholder */}
+                <div style={{ display: 'flex', gap: 1.5, alignItems: 'center', height: 16 }}>
+                  {[4,8,12,6,10,14,8,5,11,7,13,9,6,10,8].map((h, j) => (
+                    <div key={j} style={{
+                      width: 2, height: h, borderRadius: 1,
+                      background: v.active ? C.primary : C.gray300,
+                      opacity: v.active ? 0.7 : 0.4,
+                    }} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
 
-          <div style={{
-            marginTop: 'auto', padding: '12px 14px', borderRadius: 10,
-            background: `linear-gradient(135deg, rgba(16,185,129,0.12), rgba(16,185,129,0.05))`,
-            border: '1px solid rgba(16,185,129,0.2)',
-            textAlign: 'center',
-          }}>
-            <div style={{ fontSize: '0.6875rem', color: C.primary, fontWeight: 600, marginBottom: 2 }}>Экспорт</div>
-            <div style={{ fontSize: '0.625rem', color: 'rgba(255,255,255,0.35)' }}>VK · Telegram · MP4</div>
+          {/* Export */}
+          <div style={{ marginTop: 'auto' }}>
+            <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: C.dark, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Upload size={12} /> Export
+            </div>
+            {/* Social icons */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              {[
+                { label: 'VK', bg: '#0077FF' },
+                { label: 'TG', bg: '#26A5E4' },
+                { label: 'MP4', bg: C.gray600 },
+              ].map((s, i) => (
+                <div key={i} style={{
+                  width: 36, height: 36, borderRadius: 10,
+                  background: s.bg,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '0.5625rem', fontWeight: 700, color: C.white,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                }}>
+                  {s.label}
+                </div>
+              ))}
+            </div>
+            {/* Publish button */}
+            <div style={{
+              padding: '10px 14px', borderRadius: 10,
+              background: `linear-gradient(135deg, ${C.primary} 0%, ${C.primaryDark} 100%)`,
+              color: C.white, fontSize: '0.6875rem', fontWeight: 600,
+              textAlign: 'center',
+              boxShadow: '0 2px 10px rgba(16,185,129,0.3)',
+            }}>
+              Опубликовать
+            </div>
           </div>
         </div>
       </div>
@@ -307,12 +415,12 @@ function ProductMockup() {
   );
 }
 
-/* ====== HOW IT WORKS ====== */
+/* ====== HOW IT WORKS — CARD STYLE ====== */
 function HowItWorks() {
   const steps = [
-    { num: '01', icon: MessageSquare, title: 'Опишите идею', desc: 'Введите тему текстом или выберите один из готовых шаблонов — AI предложит 3 варианта сценария', accent: 'rgba(16,185,129,0.08)' },
-    { num: '02', icon: Wand2, title: 'AI создаёт контент', desc: 'Генерация визуала, озвучка голосом и автоматический монтаж — всё за пару минут', accent: 'rgba(16,185,129,0.06)' },
-    { num: '03', icon: Send, title: 'Публикуйте', desc: 'Одной кнопкой в VK, Telegram и MAX — или скачайте готовый файл на устройство', accent: 'rgba(16,185,129,0.04)' },
+    { num: '1', icon: MessageSquare, title: 'Идея', desc: 'Введите тему текстом или выберите один из готовых шаблонов — AI предложит 3 варианта сценария.' },
+    { num: '2', icon: Wand2, title: 'Генерация AI', desc: 'Генерация визуала, озвучка голосом и автоматический монтаж — всё за пару минут.' },
+    { num: '3', icon: Send, title: 'Публикация', desc: 'Одной кнопкой в VK, Telegram и MAX — или скачайте готовый файл на устройство.' },
   ];
 
   return (
@@ -326,42 +434,35 @@ function HowItWorks() {
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 24,
-          position: 'relative',
+          gap: 20,
         }}>
-          {/* Connector line */}
-          <div className="steps-connector" style={{
-            position: 'absolute', top: 52, left: 'calc(16.66% + 24px)', right: 'calc(16.66% + 24px)',
-            height: 2,
-            background: `linear-gradient(90deg, ${C.primary}, rgba(16,185,129,0.2))`,
-            borderRadius: 1,
-            zIndex: 0,
-          }} />
-
           {steps.map((s, i) => (
             <Reveal key={s.num} delay={i + 1}>
               <div style={{
-                textAlign: 'center', padding: '0 16px',
-                position: 'relative', zIndex: 1,
+                background: C.white,
+                border: `1px solid ${C.gray200}`,
+                borderRadius: 20,
+                padding: '32px 28px',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                height: '100%',
               }}>
                 <div style={{
-                  width: 72, height: 72, borderRadius: 20,
-                  background: C.white,
-                  border: `2px solid ${i === 0 ? C.primary : C.gray200}`,
+                  width: 52, height: 52, borderRadius: 16,
+                  background: i === 0 ? C.primaryLight : C.gray100,
+                  border: `1px solid ${i === 0 ? 'rgba(16,185,129,0.15)' : C.gray200}`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  margin: '0 auto 20px',
-                  boxShadow: i === 0 ? `0 0 0 6px ${C.primaryGlow}` : C.shadowSm,
-                  transition: 'all 0.3s ease',
+                  marginBottom: 20,
                 }}>
-                  <s.icon size={28} color={i === 0 ? C.primary : C.gray500} strokeWidth={1.8} />
+                  <s.icon size={24} color={i === 0 ? C.primary : C.gray500} strokeWidth={1.8} />
                 </div>
 
-                <div style={{
-                  fontSize: '0.6875rem', fontWeight: 700, color: C.primary,
-                  marginBottom: 10, letterSpacing: '0.08em',
-                }}>{s.num}</div>
-
-                <h3 style={{ fontSize: '1.2rem', marginBottom: 10, fontWeight: 700 }}>{s.title}</h3>
+                <h3 style={{
+                  fontSize: '1.15rem', marginBottom: 10, fontWeight: 700, color: C.dark,
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  <span style={{ color: C.primary, fontSize: '0.875rem', fontWeight: 800 }}>{s.num}.</span>
+                  {s.title}
+                </h3>
                 <p style={{ color: C.gray500, fontSize: '0.9375rem', lineHeight: 1.65 }}>{s.desc}</p>
               </div>
             </Reveal>
