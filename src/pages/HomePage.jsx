@@ -1,14 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Play, Sparkles, Share2, ChevronDown, Check, Zap, Video,
-  MessageSquare, Mic, Layout, Clock, Globe, ArrowRight,
-  Wand2, Film, Send, Image, Volume2, Upload,
+  Play, Sparkles, Share2, ChevronDown, Check, Zap, Lightbulb,
+  Settings, Mic, Layout, Globe, ArrowRight, Wand2, Film, Send,
+  Volume2, Upload,
 } from 'lucide-react';
 import { C } from '../lib/theme.js';
 import { tariffs } from '../data/tariffs.js';
 import Btn from '../components/Btn.jsx';
 
+/* ============================================================
+ * Reveal-on-scroll helper (kept from previous version)
+ * ============================================================ */
 function useReveal() {
   const ref = useRef(null);
   useEffect(() => {
@@ -30,9 +33,46 @@ function Reveal({ children, delay = 0, style, className = '' }) {
   return <div ref={ref} className={`reveal ${delayClass} ${className}`} style={style}>{children}</div>;
 }
 
+/* ============================================================
+ * Page-scoped styles (responsive bits + hex pattern keyframe)
+ * Lives only on the home page, kept here to avoid touching
+ * global.css across the project.
+ * ============================================================ */
+function HomeStyles() {
+  return (
+    <style>{`
+      /* Hero responsive */
+      @media (max-width: 1023px) {
+        .home-hero { padding: 48px 40px !important; min-height: 0 !important; }
+        .home-hero-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
+        .home-hero h1 { font-size: 40px !important; }
+        .home-browser { max-width: 620px !important; margin: 0 auto !important; }
+      }
+      @media (max-width: 767px) {
+        .home-hero-wrap { padding: 16px !important; }
+        .home-hero { padding: 40px 24px !important; }
+        .home-hero h1 { font-size: 32px !important; }
+        .home-hero .home-cta-row { flex-direction: column !important; gap: 10px !important; }
+        .home-hero .home-cta-row > * { width: 100% !important; }
+        .home-hero .home-cta-row .btn { width: 100% !important; }
+        .home-how-grid { grid-template-columns: 1fr !important; gap: 16px !important; }
+      }
+
+      /* Browser body grid is preserved at all sizes (it's miniature) */
+      .home-browser-body {
+        display: grid;
+        grid-template-columns: 1fr 1.4fr 1fr;
+        grid-template-rows: auto auto;
+        gap: 10px;
+      }
+    `}</style>
+  );
+}
+
 export default function HomePage() {
   return (
     <>
+      <HomeStyles />
       <Hero />
       <HowItWorks />
       <Features />
@@ -43,428 +83,644 @@ export default function HomePage() {
   );
 }
 
-/* ====== HERO — LIGHT, TEXT LEFT + MOCKUP RIGHT ====== */
+/* ============================================================
+ * HERO — rounded dark block, radial emerald gradient,
+ * H1 left, browser mockup right, hex pattern overlay
+ * ============================================================ */
 function Hero() {
   const [loaded, setLoaded] = useState(false);
   useEffect(() => { const t = setTimeout(() => setLoaded(true), 100); return () => clearTimeout(t); }, []);
 
+  // SVG hex pattern as a data-URL background
+  const hexBg = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='52' viewBox='0 0 60 52'><path d='M30 0 L60 15 L60 37 L30 52 L0 37 L0 15 Z' fill='none' stroke='%23ffffff' stroke-opacity='0.06' stroke-width='0.7'/></svg>\")";
+
   return (
-    <section style={{
-      position: 'relative',
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      overflow: 'hidden',
-      background: '#F4F7F5',
-      paddingTop: 72,
-    }}>
-      {/* === LAYERED LIGHT BACKGROUND === */}
-      {/* Base warm gradient */}
-      <div style={{
-        position: 'absolute', inset: 0,
-        background: 'linear-gradient(135deg, #F0F5F2 0%, #E8F0EC 30%, #F4F7F5 60%, #EDF5F0 100%)',
-        pointerEvents: 'none',
-      }} />
-      {/* Soft emerald glow top-right */}
-      <div style={{
-        position: 'absolute', top: '-10%', right: '-5%',
-        width: '60%', height: '80%',
-        background: 'radial-gradient(ellipse 70% 60% at 60% 30%, rgba(16,185,129,0.07) 0%, rgba(16,185,129,0.02) 50%, transparent 70%)',
-        pointerEvents: 'none',
-      }} />
-      {/* Warm glow bottom-left */}
-      <div style={{
-        position: 'absolute', bottom: '-10%', left: '-5%',
-        width: '50%', height: '60%',
-        background: 'radial-gradient(ellipse 60% 50% at 40% 60%, rgba(16,185,129,0.04) 0%, transparent 70%)',
-        pointerEvents: 'none',
-      }} />
-      {/* Subtle geometric pattern overlay (top-right) */}
-      <div style={{
-        position: 'absolute', top: 0, right: 0,
-        width: '45%', height: '60%',
-        opacity: 0.04,
-        backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 5L55 17.5V42.5L30 55L5 42.5V17.5L30 5Z' fill='none' stroke='%2310B981' stroke-width='0.5'/%3E%3C/svg%3E")`,
-        backgroundSize: '60px 60px',
-        pointerEvents: 'none',
-      }} />
-      {/* Bottom gradient fade to white */}
-      <div style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0, height: 120,
-        background: 'linear-gradient(to top, #FFFFFF 0%, transparent 100%)',
-        pointerEvents: 'none',
-        zIndex: 1,
-      }} />
+    <section
+      className="home-hero-wrap"
+      style={{
+        padding: '24px',
+        paddingTop: 96, // 72 header + 24 gap
+      }}
+    >
+      <div
+        className="home-hero"
+        style={{
+          position: 'relative',
+          borderRadius: 24,
+          overflow: 'hidden',
+          background: 'radial-gradient(ellipse 85% 75% at 50% 50%, #1f5043 0%, #143628 45%, #0a1f1a 100%)',
+          minHeight: 580,
+          padding: '56px 64px',
+          isolation: 'isolate',
+        }}
+      >
+        {/* Hex pattern overlay */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: hexBg,
+            backgroundRepeat: 'repeat',
+            pointerEvents: 'none',
+            zIndex: 0,
+          }}
+        />
 
-      {/* === CONTENT === */}
-      <div className="container-lg hero-grid" style={{
-        position: 'relative', zIndex: 2,
-        display: 'flex', alignItems: 'center', gap: 48,
-        padding: '60px 24px 80px',
-      }}>
-        {/* LEFT — Text */}
-        <div style={{
-          flex: '0 0 45%', maxWidth: 520,
-          opacity: loaded ? 1 : 0,
-          transform: loaded ? 'translateY(0)' : 'translateY(24px)',
-          transition: 'all 0.8s cubic-bezier(0.4, 0, 0.2, 1) 0.15s',
-        }}>
-          <h1 style={{
-            fontFamily: "'Manrope', sans-serif",
-            fontSize: 'clamp(2.2rem, 4.5vw, 3.5rem)',
-            fontWeight: 800, lineHeight: 1.1,
-            color: C.dark, letterSpacing: '-0.03em',
-            marginBottom: 24,
-          }}>
-            Идея <span style={{ color: C.primary }}>&rarr;</span> AI&#8209;видео
-            <br />
-            <span style={{ color: C.primary }}>&rarr;</span> публикация
-            <br />
-            за минуты
-          </h1>
-
-          <p style={{
-            fontSize: '1.0625rem',
-            color: C.gray500,
-            lineHeight: 1.7, marginBottom: 36,
-            maxWidth: 420,
-          }}>
-            Опишите идею, получите сценарий, озвучку
-            и готовый ролик для VK, Telegram и других
-            площадок — без сложного монтажа.
-          </p>
-
+        <div
+          className="home-hero-grid"
+          style={{
+            position: 'relative',
+            zIndex: 1,
+            display: 'grid',
+            gridTemplateColumns: '45fr 55fr',
+            gap: 48,
+            alignItems: 'center',
+            minHeight: 472,
+          }}
+        >
+          {/* LEFT — Copy */}
           <div style={{
-            display: 'flex', gap: 14, flexWrap: 'wrap',
+            opacity: loaded ? 1 : 0,
+            transform: loaded ? 'translateY(0)' : 'translateY(24px)',
+            transition: 'all 0.8s cubic-bezier(0.4, 0, 0.2, 1) 0.15s',
           }}>
-            <Link to="/login"><Btn variant="primary" size="lg">Начать бесплатно</Btn></Link>
-            <a href="#how"><Btn variant="outline" size="lg">Посмотреть демо</Btn></a>
-          </div>
-        </div>
+            <h1 style={{
+              color: C.white,
+              fontSize: 56,
+              fontWeight: 700,
+              lineHeight: 1.1,
+              letterSpacing: '-0.02em',
+              fontFamily: "'Manrope', sans-serif",
+            }}>
+              <span style={{ display: 'block' }}>
+                Идея <span style={{ color: C.primary }}>&rarr;</span>{' '}
+                <span style={{ whiteSpace: 'nowrap' }}>AI&#8209;видео</span>
+              </span>
+              <span style={{ display: 'block' }}>
+                <span style={{ color: C.primary }}>&rarr;</span> публикация
+              </span>
+              <span style={{ display: 'block' }}>за минуты</span>
+            </h1>
 
-        {/* RIGHT — Product Mockup */}
-        <div style={{
-          flex: 1, minWidth: 0,
-          opacity: loaded ? 1 : 0,
-          transform: loaded ? 'translateY(0) scale(1)' : 'translateY(32px) scale(0.97)',
-          transition: 'all 0.9s cubic-bezier(0.4, 0, 0.2, 1) 0.4s',
-        }}>
-          <ProductMockup />
+            <p style={{
+              marginTop: 24,
+              maxWidth: 460,
+              color: '#c9d1cf',
+              fontSize: 16,
+              lineHeight: 1.5,
+            }}>
+              Опишите идею, получите сценарий, озвучку и готовый ролик для VK, Telegram и других площадок.
+            </p>
+
+            <div
+              className="home-cta-row"
+              style={{
+                marginTop: 36,
+                display: 'flex',
+                gap: 12,
+                flexWrap: 'wrap',
+              }}
+            >
+              <Link to="/login">
+                <Btn variant="primary" size="lg">Начать бесплатно</Btn>
+              </Link>
+              <a href="#how">
+                <Btn variant="ghost" size="lg">Посмотреть демо</Btn>
+              </a>
+            </div>
+          </div>
+
+          {/* RIGHT — Browser mockup */}
+          <div style={{
+            opacity: loaded ? 1 : 0,
+            transform: loaded ? 'translateY(0) scale(1)' : 'translateY(32px) scale(0.97)',
+            transition: 'all 0.9s cubic-bezier(0.4, 0, 0.2, 1) 0.4s',
+          }}>
+            <BrowserMockup />
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-function ProductMockup() {
+/* ============================================================
+ * BROWSER MOCKUP — raised, light beige panels, 6 cells
+ * ============================================================ */
+function BrowserMockup() {
   return (
-    <div style={{
-      position: 'relative',
-      borderRadius: 20,
-      background: C.white,
-      border: `1px solid ${C.gray200}`,
-      boxShadow: '0 20px 60px rgba(10,31,22,0.08), 0 8px 24px rgba(10,31,22,0.04)',
-      overflow: 'hidden',
-    }}>
-      {/* Window chrome */}
+    <div
+      className="home-browser"
+      role="img"
+      aria-label="Предпросмотр интерфейса VideoAI"
+      style={{
+        width: '100%',
+        maxWidth: 720,
+        marginLeft: 'auto',
+        background: '#1a1a1a',
+        borderRadius: 14,
+        overflow: 'hidden',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        boxShadow: [
+          '0 1px 0 rgba(255, 255, 255, 0.06) inset',
+          '0 30px 60px rgba(0, 0, 0, 0.55)',
+          '0 12px 24px rgba(0, 0, 0, 0.4)',
+          '0 0 0 1px rgba(16, 185, 129, 0.08)',
+          '0 0 80px rgba(16, 185, 129, 0.10)',
+        ].join(', '),
+      }}
+    >
+      {/* Topbar */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: '12px 18px',
-        background: C.bg,
-        borderBottom: `1px solid ${C.gray200}`,
+        height: 32,
+        background: '#2a2a2a',
+        display: 'flex',
+        alignItems: 'center',
+        padding: '0 12px',
+        position: 'relative',
       }}>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {['#FF5F57', '#FEBC2E', '#28C840'].map(c => (
-            <div key={c} style={{ width: 10, height: 10, borderRadius: '50%', background: c, opacity: 0.8 }} />
-          ))}
+        <div style={{ display: 'flex', gap: 8 }} aria-hidden="true">
+          <span style={{ width: 12, height: 12, borderRadius: '50%', background: '#ff5f57', display: 'block' }} />
+          <span style={{ width: 12, height: 12, borderRadius: '50%', background: '#febc2e', display: 'block' }} />
+          <span style={{ width: 12, height: 12, borderRadius: '50%', background: '#28c840', display: 'block' }} />
         </div>
         <div style={{
-          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          background: '#3a3a3a',
+          borderRadius: 6,
+          padding: '3px 12px',
+          fontSize: 11,
+          color: '#bbb',
         }}>
-          <div style={{
-            background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 8,
-            padding: '4px 16px', fontSize: '0.6875rem', color: C.gray400,
-            display: 'flex', alignItems: 'center', gap: 6,
-          }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: C.primary, opacity: 0.6 }} />
-            ai.videoai.ru/studio
-          </div>
+          ai.videoai.ru
         </div>
-        <div style={{ width: 48 }} />
       </div>
 
-      {/* Product UI — 3-column layout */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '220px 1fr 200px',
-        minHeight: 360,
-      }}>
-        {/* LEFT PANEL — Prompt */}
-        <div style={{
-          borderRight: `1px solid ${C.gray100}`,
-          padding: 16,
-          display: 'flex', flexDirection: 'column', gap: 14,
-          background: C.offWhite,
-        }}>
-          <div>
-            <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: C.primary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Sparkles size={12} /> Prompt Panel
-            </div>
-            <div style={{
-              background: C.white, borderRadius: 10,
-              padding: 12, fontSize: '0.75rem',
-              color: C.gray600, lineHeight: 1.5,
-              border: `1px solid ${C.gray200}`,
-              minHeight: 56,
-            }}>
-              Ролик о запуске кроссовок в futuristic city
-            </div>
-          </div>
-
-          {/* Generate button */}
-          <div style={{
-            padding: '10px 16px', borderRadius: 10,
-            background: `linear-gradient(135deg, ${C.primary} 0%, ${C.primaryDark} 100%)`,
-            color: C.white, fontSize: '0.75rem', fontWeight: 600,
-            textAlign: 'center', cursor: 'default',
-            boxShadow: '0 2px 8px rgba(16,185,129,0.25)',
-          }}>
-            Генерация...
-          </div>
-
-          {/* Generated images */}
-          <div>
-            <div style={{ fontSize: '0.625rem', fontWeight: 600, color: C.gray400, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Generated scenes
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-              {[
-                `linear-gradient(135deg, #1a3a2a 0%, #0d2b1e 50%, rgba(16,185,129,0.3) 100%)`,
-                `linear-gradient(135deg, #2a1a3a 0%, #1e0d2b 50%, rgba(129,16,185,0.3) 100%)`,
-                `linear-gradient(135deg, #3a2a1a 0%, #2b1e0d 50%, rgba(185,129,16,0.3) 100%)`,
-                `linear-gradient(135deg, #1a2a3a 0%, #0d1e2b 50%, rgba(16,129,185,0.3) 100%)`,
-              ].map((bg, i) => (
-                <div key={i} style={{
-                  height: 52, borderRadius: 8,
-                  background: bg,
-                  border: i === 0 ? `2px solid ${C.primary}` : `1px solid ${C.gray200}`,
-                  position: 'relative',
-                  overflow: 'hidden',
-                }}>
-                  {i === 0 && (
-                    <div style={{
-                      position: 'absolute', top: 3, right: 3,
-                      width: 14, height: 14, borderRadius: 4,
-                      background: C.primary,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <Check size={8} color={C.white} strokeWidth={3} />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* CENTER — Video Preview */}
-        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: C.dark, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Film size={12} /> Генерация...
-          </div>
-          <div style={{
-            flex: 1, borderRadius: 14,
-            background: 'linear-gradient(145deg, #0F2E21 0%, #0A1F16 60%, #0D2B1E 100%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            position: 'relative', overflow: 'hidden',
-            minHeight: 220,
-          }}>
-            {/* Cinematic scene preview */}
-            <div style={{
-              position: 'absolute', inset: 0,
-              background: 'radial-gradient(circle at 50% 45%, rgba(16,185,129,0.12) 0%, transparent 60%)',
-            }} />
-            <div style={{
-              position: 'absolute', inset: 0,
-              background: 'radial-gradient(circle at 30% 70%, rgba(185,129,16,0.08) 0%, transparent 50%)',
-            }} />
-            {/* City silhouette placeholder */}
-            <div style={{
-              position: 'absolute', bottom: 0, left: 0, right: 0, height: '40%',
-              background: 'linear-gradient(to top, rgba(16,185,129,0.08), transparent)',
-            }} />
-            <div style={{
-              width: 56, height: 56, borderRadius: '50%',
-              background: 'rgba(255,255,255,0.1)', border: '2px solid rgba(255,255,255,0.25)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              backdropFilter: 'blur(8px)',
-              boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
-            }}>
-              <Play size={22} color="#fff" fill="#fff" style={{ marginLeft: 2 }} />
-            </div>
-            {/* Duration badge */}
-            <div style={{
-              position: 'absolute', top: 10, right: 10,
-              background: 'rgba(0,0,0,0.4)', borderRadius: 6,
-              padding: '3px 8px', fontSize: '0.5625rem', color: 'rgba(255,255,255,0.7)',
-              backdropFilter: 'blur(8px)',
-            }}>
-              00:30
-            </div>
-          </div>
-
-          {/* Scene timeline */}
-          <div style={{ display: 'flex', gap: 6 }}>
-            {['Сцена 1', 'Сцена 2', 'Сцена 3', 'Сцена 4', 'Сцена 5'].map((s, i) => (
-              <div key={i} style={{
-                flex: 1, height: 40, borderRadius: 8,
-                background: i === 0
-                  ? `linear-gradient(135deg, rgba(16,185,129,0.12), rgba(16,185,129,0.04))`
-                  : i < 3 ? C.gray100 : C.offWhite,
-                border: i === 0 ? `1.5px solid ${C.primary}` : `1px solid ${C.gray200}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '0.5625rem', color: i === 0 ? C.primary : C.gray400, fontWeight: 600,
-              }}>{s}</div>
-            ))}
-          </div>
-        </div>
-
-        {/* RIGHT PANEL — Voiceover + Export */}
-        <div className="mockup-right" style={{
-          borderLeft: `1px solid ${C.gray100}`,
-          padding: 16,
-          display: 'flex', flexDirection: 'column', gap: 14,
-          background: C.offWhite,
-        }}>
-          {/* Voiceover */}
-          <div>
-            <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: C.dark, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Volume2 size={12} /> Voiceover
-            </div>
-            {[
-              { name: 'Татьяна', active: true },
-              { name: 'Максим', active: false },
-            ].map((v, i) => (
-              <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '8px 10px', borderRadius: 8, marginBottom: 6,
-                background: v.active ? C.primaryLight : C.white,
-                border: `1px solid ${v.active ? 'rgba(16,185,129,0.2)' : C.gray200}`,
-              }}>
-                <div style={{
-                  width: 28, height: 28, borderRadius: '50%',
-                  background: v.active ? C.primary : C.gray300,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <Mic size={12} color={C.white} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: C.dark }}>{v.name}</div>
-                </div>
-                {/* Waveform placeholder */}
-                <div style={{ display: 'flex', gap: 1.5, alignItems: 'center', height: 16 }}>
-                  {[4,8,12,6,10,14,8,5,11,7,13,9,6,10,8].map((h, j) => (
-                    <div key={j} style={{
-                      width: 2, height: h, borderRadius: 1,
-                      background: v.active ? C.primary : C.gray300,
-                      opacity: v.active ? 0.7 : 0.4,
-                    }} />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Export */}
-          <div style={{ marginTop: 'auto' }}>
-            <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: C.dark, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Upload size={12} /> Export
-            </div>
-            {/* Social icons */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              {[
-                { label: 'VK', bg: '#0077FF' },
-                { label: 'TG', bg: '#26A5E4' },
-                { label: 'MP4', bg: C.gray600 },
-              ].map((s, i) => (
-                <div key={i} style={{
-                  width: 36, height: 36, borderRadius: 10,
-                  background: s.bg,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '0.5625rem', fontWeight: 700, color: C.white,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-                }}>
-                  {s.label}
-                </div>
-              ))}
-            </div>
-            {/* Publish button */}
-            <div style={{
-              padding: '10px 14px', borderRadius: 10,
-              background: `linear-gradient(135deg, ${C.primary} 0%, ${C.primaryDark} 100%)`,
-              color: C.white, fontSize: '0.6875rem', fontWeight: 600,
-              textAlign: 'center',
-              boxShadow: '0 2px 10px rgba(16,185,129,0.3)',
-            }}>
-              Опубликовать
-            </div>
-          </div>
-        </div>
+      {/* 6-cell grid */}
+      <div
+        className="home-browser-body"
+        style={{ background: '#0f0f0f', padding: 14 }}
+      >
+        <PromptPanel />
+        <VideoPanel />
+        <SceneListPanel />
+        <BigScenePanel />
+        <VoiceoverPanel />
+        <ExportPanel />
       </div>
     </div>
   );
 }
 
-/* ====== HOW IT WORKS — CARD STYLE ====== */
+const PANEL_BG = '#e8e4d8';
+const PANEL_TEXT = '#2a2a2a';
+
+function MiniPanel({ children, style }) {
+  return (
+    <div style={{
+      background: PANEL_BG,
+      color: PANEL_TEXT,
+      borderRadius: 10,
+      padding: 10,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 8,
+      ...(style || {}),
+    }}>
+      {children}
+    </div>
+  );
+}
+
+function MiniTitle({ children, accent }) {
+  return (
+    <h4 style={{
+      fontSize: 10,
+      textTransform: 'uppercase',
+      letterSpacing: '0.05em',
+      color: accent ? C.primary : '#888',
+      fontWeight: 600,
+      fontFamily: 'inherit',
+    }}>{children}</h4>
+  );
+}
+
+function PromptPanel() {
+  return (
+    <MiniPanel>
+      <MiniTitle>Prompt Panel</MiniTitle>
+      <div style={{
+        background: '#fff',
+        borderRadius: 6,
+        padding: '7px 10px',
+        height: 28,
+        fontSize: 11,
+        color: '#999',
+        display: 'flex',
+        alignItems: 'center',
+      }}>Напишите идею…</div>
+      <div style={{
+        background: '#d4cfc0',
+        borderRadius: 6,
+        padding: '8px 10px',
+        fontSize: 11,
+        lineHeight: 1.4,
+        color: '#3a3a3a',
+      }}>
+        Ролик о запуске кроссовок в futuristic city
+      </div>
+      <div style={{
+        background: C.primary,
+        color: '#fff',
+        borderRadius: 6,
+        padding: 7,
+        fontSize: 11,
+        fontWeight: 600,
+        textAlign: 'center',
+        marginTop: 'auto',
+      }}>
+        Генерация…
+      </div>
+    </MiniPanel>
+  );
+}
+
+function VideoPanel() {
+  return (
+    <MiniPanel>
+      <MiniTitle accent>Генерация…</MiniTitle>
+      {/* Progress bar */}
+      <div style={{ height: 3, background: '#d4cfc0', borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: '70%', background: C.primary, borderRadius: 2 }} />
+      </div>
+
+      {/* Video frame */}
+      <div style={{
+        position: 'relative',
+        width: '100%',
+        aspectRatio: '16/10',
+        borderRadius: 8,
+        overflow: 'hidden',
+        background:
+          'radial-gradient(ellipse at 50% 60%, transparent 30%, rgba(0,0,0,0.4) 100%), ' +
+          'linear-gradient(180deg, #4a3825 0%, #8a5a3a 40%, #d4823e 70%, #2a1a15 100%)',
+      }}>
+        {/* City silhouette */}
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 400 100"
+          preserveAspectRatio="xMidYEnd slice"
+          style={{ position: 'absolute', left: 0, right: 0, bottom: '28%', width: '100%', height: '26%' }}
+        >
+          <g fill="#1a0a05" opacity="0.85">
+            <rect x="10" y="50" width="14" height="50" />
+            <rect x="26" y="38" width="20" height="62" />
+            <rect x="48" y="56" width="10" height="44" />
+            <rect x="60" y="32" width="18" height="68" />
+            <rect x="80" y="48" width="12" height="52" />
+            <rect x="94" y="52" width="22" height="48" />
+            <rect x="118" y="40" width="14" height="60" />
+            <polygon points="134,40 144,28 154,40 154,100 134,100" />
+            <rect x="158" y="50" width="10" height="50" />
+            <rect x="170" y="42" width="22" height="58" />
+            <rect x="194" y="48" width="14" height="52" />
+            <rect x="210" y="36" width="18" height="64" />
+            <rect x="230" y="52" width="12" height="48" />
+            <polygon points="246,48 254,38 262,48 262,100 246,100" />
+            <rect x="266" y="44" width="16" height="56" />
+            <rect x="284" y="52" width="12" height="48" />
+            <rect x="298" y="40" width="20" height="60" />
+            <rect x="320" y="48" width="14" height="52" />
+            <rect x="336" y="56" width="10" height="44" />
+            <rect x="350" y="44" width="16" height="56" />
+            <rect x="368" y="50" width="12" height="50" />
+            <rect x="382" y="48" width="12" height="52" />
+          </g>
+          <g fill="#ffd89a" opacity="0.55">
+            {[14,30,65,84,98,122,162,176,198,216,234,272,304,324,354,372].map((x, i) => (
+              <rect key={x} x={x} y={i % 2 === 0 ? 62 : 50} width="1.5" height="3" />
+            ))}
+          </g>
+        </svg>
+
+        {/* Runner silhouette */}
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 60 110"
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: '38%',
+            transform: 'translate(-50%, -50%)',
+            width: '26%',
+          }}
+        >
+          <g fill="#0a0503">
+            <circle cx="28" cy="14" r="11" />
+            <path d="M17 28 L39 28 L46 60 L40 96 L30 96 L26 70 Z" />
+            <path d="M17 36 L-2 52 L4 60 L22 44 Z" />
+            <path d="M39 32 L58 26 L63 34 L43 44 Z" />
+            <path d="M40 82 L58 108 L54 118 L34 96 Z" />
+            <path d="M28 88 L14 126 L22 130 L34 100 Z" />
+          </g>
+          <g fill="#ffc58a" opacity="0.6">
+            <ellipse cx="30" cy="12" rx="3.5" ry="2.5" />
+            <rect x="38" y="26" width="3" height="12" />
+            <rect x="40" y="80" width="3" height="12" />
+          </g>
+        </svg>
+      </div>
+
+      {/* Controls */}
+      <div style={{
+        height: 24,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 2px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#6b6b6b', fontSize: 9 }}>
+          <span style={{
+            width: 0,
+            height: 0,
+            borderStyle: 'solid',
+            borderWidth: '5px 0 5px 8px',
+            borderColor: 'transparent transparent transparent #2a2a2a',
+            display: 'inline-block',
+          }} aria-hidden="true" />
+          <span>0:12 / 0:45</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#6b6b6b', fontSize: 12 }} aria-hidden="true">
+          <span>🔊</span>
+          <span>⛶</span>
+          <span>⚙</span>
+        </div>
+      </div>
+    </MiniPanel>
+  );
+}
+
+function SceneListPanel() {
+  const scenes = [
+    'linear-gradient(180deg, #4a2818 0%, #b65a2a 50%, #f4a04e 100%)',
+    'linear-gradient(180deg, #0a1a3c 0%, #1e3a6e 50%, #4a8bc8 100%)',
+    'linear-gradient(180deg, #2a0a3a 0%, #5a1f6e 50%, #c87ad6 100%)',
+  ];
+  return (
+    <MiniPanel>
+      <MiniTitle>Generated scenes</MiniTitle>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {scenes.map((bg, i) => (
+          <div key={i} style={{
+            position: 'relative',
+            height: 36,
+            borderRadius: 6,
+            overflow: 'hidden',
+            background: bg,
+          }}>
+            <ScenePlay size={18} />
+          </div>
+        ))}
+      </div>
+    </MiniPanel>
+  );
+}
+
+function BigScenePanel() {
+  return (
+    <MiniPanel>
+      <MiniTitle>Generated scenes</MiniTitle>
+      <div style={{
+        position: 'relative',
+        width: '100%',
+        flex: 1,
+        minHeight: 90,
+        borderRadius: 6,
+        overflow: 'hidden',
+        background: 'linear-gradient(180deg, #1a0a3a 0%, #3a1f6e 45%, #6a4ac8 85%, #8a6adc 100%)',
+      }}>
+        <ScenePlay size={32} big />
+      </div>
+    </MiniPanel>
+  );
+}
+
+function ScenePlay({ size = 18, big = false }) {
+  return (
+    <span style={{
+      position: 'absolute',
+      left: '50%',
+      top: '50%',
+      transform: 'translate(-50%, -50%)',
+      width: size,
+      height: size,
+      borderRadius: '50%',
+      background: 'rgba(255,255,255,0.9)',
+      display: 'grid',
+      placeItems: 'center',
+    }} aria-hidden="true">
+      <span style={{
+        width: 0,
+        height: 0,
+        borderStyle: 'solid',
+        borderWidth: big ? '8px 0 8px 13px' : '4px 0 4px 7px',
+        borderColor: 'transparent transparent transparent #2a2a2a',
+        marginLeft: big ? 2 : 1,
+        display: 'inline-block',
+      }} />
+    </span>
+  );
+}
+
+function VoiceoverPanel() {
+  return (
+    <MiniPanel>
+      <MiniTitle>Voiceover</MiniTitle>
+      <VoiceRow
+        name="Татьяна"
+        avatarBg="linear-gradient(135deg, #fde2c8 0%, #f4a187 100%)"
+      />
+      <VoiceRow
+        name="Максим"
+        avatarBg="linear-gradient(135deg, #c8d4e0 0%, #7a98b8 100%)"
+      />
+    </MiniPanel>
+  );
+}
+
+function VoiceRow({ name, avatarBg }) {
+  // 25 bars 4–14px, ~60% active (15 green, 10 gray)
+  const heights = [6, 9, 4, 12, 8, 5, 11, 7, 14, 9, 6, 4, 10, 13, 8, 5, 7, 11, 9, 4, 6, 12, 8, 5, 10];
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ width: 22, height: 22, borderRadius: '50%', background: avatarBg, flexShrink: 0 }} />
+      <div style={{ fontSize: 11, color: PANEL_TEXT, fontWeight: 500, width: 50, flexShrink: 0 }}>{name}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, height: 14 }}>
+        {heights.map((h, i) => (
+          <span key={i} style={{
+            width: 2,
+            height: h,
+            borderRadius: 1,
+            background: i < 15 ? C.primary : '#aaa',
+            display: 'inline-block',
+          }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ExportPanel() {
+  return (
+    <MiniPanel>
+      <MiniTitle>Export</MiniTitle>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <SocialButton label="VK" aria="VK" bg="#0077FF">VK</SocialButton>
+        <SocialButton label="Telegram" aria="Telegram" bg="#229ED9">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff" aria-hidden="true">
+            <path d="M21.94 4.5L18.7 19.93c-.24 1.08-.88 1.35-1.78.84l-4.92-3.63-2.37 2.28c-.26.26-.48.48-.99.48l.35-5.01 9.12-8.24c.4-.35-.09-.55-.62-.2l-11.27 7.1L1.4 12.06c-1.06-.33-1.08-1.06.22-1.57l19.06-7.35c.88-.33 1.66.2 1.26 3.36z" />
+          </svg>
+        </SocialButton>
+        <SocialButton label="Instagram" aria="Instagram"
+          bg="linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="4" />
+            <circle cx="12" cy="12" r="4" />
+            <circle cx="17.5" cy="6.5" r="1" fill="#fff" />
+          </svg>
+        </SocialButton>
+      </div>
+      <div style={{
+        background: C.primary,
+        color: '#fff',
+        borderRadius: 6,
+        padding: 7,
+        fontSize: 11,
+        fontWeight: 600,
+        textAlign: 'center',
+        marginTop: 'auto',
+      }}>
+        Опубликовать
+      </div>
+    </MiniPanel>
+  );
+}
+
+function SocialButton({ children, bg, aria }) {
+  return (
+    <div
+      role="img"
+      aria-label={aria}
+      style={{
+        width: 28,
+        height: 28,
+        borderRadius: 6,
+        background: bg,
+        display: 'grid',
+        placeItems: 'center',
+        color: '#fff',
+        fontSize: 10,
+        fontWeight: 700,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* ============================================================
+ * HOW IT WORKS — 3 cards with subtle gradient bg
+ * ============================================================ */
 function HowItWorks() {
   const steps = [
-    { num: '1', icon: MessageSquare, title: 'Идея', desc: 'Введите тему текстом или выберите один из готовых шаблонов — AI предложит 3 варианта сценария.' },
-    { num: '2', icon: Wand2, title: 'Генерация AI', desc: 'Генерация визуала, озвучка голосом и автоматический монтаж — всё за пару минут.' },
-    { num: '3', icon: Send, title: 'Публикация', desc: 'Одной кнопкой в VK, Telegram и MAX — или скачайте готовый файл на устройство.' },
+    {
+      n: '1',
+      icon: Lightbulb,
+      title: 'Идея',
+      desc: 'Опишите идею ролика своими словами — AI поймёт суть и предложит сценарий за секунды.',
+    },
+    {
+      n: '2',
+      icon: Settings,
+      title: 'Генерация AI',
+      desc: 'AI собирает сценарий, генерирует видеоряд и озвучку под выбранную площадку.',
+    },
+    {
+      n: '3',
+      icon: Share2,
+      title: 'Публикация',
+      desc: 'Публикуйте ролик одним кликом в VK, Telegram, Instagram и другие соцсети.',
+    },
   ];
 
   return (
-    <section id="how" className="section" style={{ background: C.white }}>
+    <section id="how" style={{ background: C.white, padding: '80px 0' }}>
       <div className="container">
         <Reveal>
           <h2 className="section-title">Как это работает</h2>
           <p className="section-subtitle">Три шага от идеи до публикации — без навыков монтажа</p>
         </Reveal>
 
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 20,
-        }}>
+        <div
+          className="home-how-grid"
+          style={{
+            maxWidth: 1100,
+            margin: '0 auto',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: 24,
+            padding: '0 24px',
+          }}
+        >
           {steps.map((s, i) => (
-            <Reveal key={s.num} delay={i + 1}>
-              <div style={{
-                background: C.white,
-                border: `1px solid ${C.gray200}`,
-                borderRadius: 20,
-                padding: '32px 28px',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            <Reveal key={s.n} delay={i + 1}>
+              <article style={{
+                background:
+                  'radial-gradient(120% 100% at 0% 0%, rgba(16,185,129,0.06) 0%, transparent 55%), ' +
+                  'linear-gradient(180deg, #f6f8f7 0%, #eaf0ed 100%)',
+                border: '1px solid #dde4e0',
+                borderRadius: 16,
+                padding: 28,
+                transition: 'box-shadow 200ms ease, transform 200ms ease',
                 height: '100%',
               }}>
-                <div style={{
-                  width: 52, height: 52, borderRadius: 16,
-                  background: i === 0 ? C.primaryLight : C.gray100,
-                  border: `1px solid ${i === 0 ? 'rgba(16,185,129,0.15)' : C.gray200}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  marginBottom: 20,
-                }}>
-                  <s.icon size={24} color={i === 0 ? C.primary : C.gray500} strokeWidth={1.8} />
+                <div
+                  aria-hidden="true"
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 10,
+                    background: '#ecfdf5',
+                    display: 'grid',
+                    placeItems: 'center',
+                    color: C.primary,
+                  }}
+                >
+                  <s.icon size={22} strokeWidth={2} />
                 </div>
-
                 <h3 style={{
-                  fontSize: '1.15rem', marginBottom: 10, fontWeight: 700, color: C.dark,
-                  display: 'flex', alignItems: 'center', gap: 8,
+                  marginTop: 20,
+                  fontSize: 18,
+                  fontWeight: 600,
+                  color: '#0a0a0a',
+                  fontFamily: "'Manrope', sans-serif",
+                  letterSpacing: '-0.01em',
                 }}>
-                  <span style={{ color: C.primary, fontSize: '0.875rem', fontWeight: 800 }}>{s.num}.</span>
-                  {s.title}
+                  {s.n}. {s.title}
                 </h3>
-                <p style={{ color: C.gray500, fontSize: '0.9375rem', lineHeight: 1.65 }}>{s.desc}</p>
-              </div>
+                <p style={{
+                  marginTop: 8,
+                  fontSize: 14,
+                  lineHeight: 1.5,
+                  color: '#666',
+                }}>
+                  {s.desc}
+                </p>
+              </article>
             </Reveal>
           ))}
         </div>
@@ -473,7 +729,9 @@ function HowItWorks() {
   );
 }
 
-/* ====== FEATURES — BENTO GRID ====== */
+/* ============================================================
+ * FEATURES — bento grid (kept from previous version)
+ * ============================================================ */
 function Features() {
   return (
     <section id="features" className="section" style={{
@@ -490,7 +748,6 @@ function Features() {
           gridTemplateColumns: 'repeat(12, 1fr)',
           gap: 20,
         }}>
-          {/* Large: AI Scenarios */}
           <Reveal style={{ gridColumn: 'span 7' }}>
             <div className="card" style={{
               padding: 36, height: '100%',
@@ -522,7 +779,6 @@ function Features() {
             </div>
           </Reveal>
 
-          {/* Small: Templates */}
           <Reveal delay={1} style={{ gridColumn: 'span 5' }}>
             <div className="card" style={{ padding: 36, height: '100%' }}>
               <div style={{
@@ -540,7 +796,6 @@ function Features() {
             </div>
           </Reveal>
 
-          {/* Small: TTS */}
           <Reveal delay={1} style={{ gridColumn: 'span 4' }}>
             <div className="card" style={{ padding: 36, height: '100%' }}>
               <div style={{
@@ -558,7 +813,6 @@ function Features() {
             </div>
           </Reveal>
 
-          {/* Medium: Publish */}
           <Reveal delay={2} style={{ gridColumn: 'span 4' }}>
             <div className="card" style={{ padding: 36, height: '100%' }}>
               <div style={{
@@ -576,7 +830,6 @@ function Features() {
             </div>
           </Reveal>
 
-          {/* Medium: Speed */}
           <Reveal delay={3} style={{ gridColumn: 'span 4' }}>
             <div className="card" style={{ padding: 36, height: '100%' }}>
               <div style={{
@@ -594,7 +847,6 @@ function Features() {
             </div>
           </Reveal>
 
-          {/* Wide: Russian stack */}
           <Reveal delay={2} style={{ gridColumn: 'span 12' }}>
             <div className="card" style={{
               padding: '32px 36px',
@@ -629,7 +881,9 @@ function Features() {
   );
 }
 
-/* ====== PRICING ====== */
+/* ============================================================
+ * PRICING — kept from previous version
+ * ============================================================ */
 function Pricing() {
   return (
     <section id="pricing" className="section" style={{ background: C.white }}>
@@ -753,7 +1007,9 @@ function Pricing() {
   );
 }
 
-/* ====== FAQ ====== */
+/* ============================================================
+ * FAQ — kept from previous version
+ * ============================================================ */
 function FAQ() {
   const items = [
     { q: 'Какие форматы видео поддерживаются?', a: 'На старте — вертикальное видео 9:16 длительностью 15 и 30 секунд. Идеально для сторис VK, Telegram и коротких роликов.' },
@@ -785,7 +1041,6 @@ function FAQ() {
 
 function FAQItem({ question, answer }) {
   const [open, setOpen] = useState(false);
-
   return (
     <div
       onClick={() => setOpen(!open)}
@@ -831,7 +1086,9 @@ function FAQItem({ question, answer }) {
   );
 }
 
-/* ====== FINAL CTA ====== */
+/* ============================================================
+ * FINAL CTA — kept from previous version
+ * ============================================================ */
 function CTA() {
   return (
     <section style={{
