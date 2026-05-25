@@ -1,9 +1,8 @@
-import { C } from '../lib/theme.js';
-
 const variants = {
   primary: 'btn-primary',
   dark: 'btn-dark',
   outline: 'btn-outline',
+  ghost: 'btn-ghost',
 };
 
 const sizes = {
@@ -12,9 +11,9 @@ const sizes = {
   lg: 'btn-lg',
 };
 
-export default function Btn({ variant = 'primary', size = 'md', children, ...props }) {
+export default function Btn({ variant = 'primary', size = 'md', children, className = '', ...props }) {
   return (
-    <button className={`btn ${variants[variant]} ${sizes[size]}`} {...props}>
+    <button className={`btn ${variants[variant]} ${sizes[size]} ${className}`} {...props}>
       {children}
     </button>
   );
