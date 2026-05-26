@@ -312,7 +312,7 @@ function MiniTitle({ children, accent }) {
 function PromptPanel() {
   return (
     <MiniPanel>
-      <MiniTitle>Prompt Panel</MiniTitle>
+      <MiniTitle>Промпт</MiniTitle>
       <div style={{
         background: '#fff',
         borderRadius: 6,
@@ -352,7 +352,7 @@ function PromptPanel() {
 function VideoPanel() {
   return (
     <MiniPanel>
-      <MiniTitle accent>Генерация…</MiniTitle>
+      <MiniTitle accent>Генерация</MiniTitle>
       {/* Progress bar */}
       <div style={{ height: 3, background: '#d4cfc0', borderRadius: 2, overflow: 'hidden' }}>
         <div style={{ height: '100%', width: '70%', background: C.primary, borderRadius: 2 }} />
@@ -472,7 +472,7 @@ function SceneListPanel() {
   ];
   return (
     <MiniPanel>
-      <MiniTitle>Generated scenes</MiniTitle>
+      <MiniTitle>Сцены</MiniTitle>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {scenes.map((bg, i) => (
           <div key={i} style={{
@@ -493,7 +493,7 @@ function SceneListPanel() {
 function BigScenePanel() {
   return (
     <MiniPanel>
-      <MiniTitle>Generated scenes</MiniTitle>
+      <MiniTitle>Сцены</MiniTitle>
       <div style={{
         position: 'relative',
         width: '100%',
@@ -539,7 +539,7 @@ function ScenePlay({ size = 18, big = false }) {
 function VoiceoverPanel() {
   return (
     <MiniPanel>
-      <MiniTitle>Voiceover</MiniTitle>
+      <MiniTitle>Озвучка</MiniTitle>
       <VoiceRow
         name="Татьяна"
         avatarBg="linear-gradient(135deg, #fde2c8 0%, #f4a187 100%)"
@@ -577,7 +577,7 @@ function VoiceRow({ name, avatarBg }) {
 function ExportPanel() {
   return (
     <MiniPanel>
-      <MiniTitle>Export</MiniTitle>
+      <MiniTitle>Экспорт</MiniTitle>
       <div style={{ display: 'flex', gap: 6 }}>
         <SocialButton label="VK" aria="VK" bg="#0077FF">VK</SocialButton>
         <SocialButton label="Telegram" aria="Telegram" bg="#229ED9">
