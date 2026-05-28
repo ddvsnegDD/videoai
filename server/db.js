@@ -23,8 +23,11 @@ export async function initDB() {
       code VARCHAR(6) NOT NULL,
       expires_at TIMESTAMPTZ NOT NULL,
       used BOOLEAN DEFAULT FALSE,
+      attempts INTEGER DEFAULT 0,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+
+    ALTER TABLE auth_codes ADD COLUMN IF NOT EXISTS attempts INTEGER DEFAULT 0;
   `);
   console.log('DB tables ready');
 }

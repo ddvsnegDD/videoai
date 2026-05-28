@@ -60,7 +60,10 @@ export default function LoginPage() {
       await login(email, fullCode);
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      if (err.data?.error === 'invalid_code') {
+      if (err.data?.error === 'too_many_attempts') {
+        setError('Слишком много попыток, запросите новый код');
+        setStep('email');
+      } else if (err.data?.error === 'invalid_code') {
         setError('Неверный или просроченный код');
       } else {
         setError('Ошибка проверки кода');
