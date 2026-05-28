@@ -1,7 +1,8 @@
-import { Link, useLocation } from 'react-router-dom';
-import { Play, Menu, X } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Play, Menu, X, LogOut, Sparkles } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { C } from '../lib/theme.js';
+import { useAuth } from '../lib/auth.jsx';
 import Btn from './Btn.jsx';
 
 export default function Layout({ children }) {
@@ -21,6 +22,8 @@ export default function Layout({ children }) {
 }
 
 function Header({ isLanding, menuOpen, setMenuOpen }) {
+  const { user, loading, logout } = useAuth();
+  const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -28,6 +31,11 @@ function Header({ isLanding, menuOpen, setMenuOpen }) {
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  async function handleLogout() {
+    await logout();
+    navigate('/');
+  }
 
   return (
     <header style={{
@@ -72,7 +80,7 @@ function Header({ isLanding, menuOpen, setMenuOpen }) {
           </span>
         </Link>
 
-        {isLanding && (
+        {isLanding && !user && (
           <>
             <nav style={{ display: 'flex', alignItems: 'center', gap: 36 }} className="desktop-nav">
               {[
@@ -111,14 +119,57 @@ function Header({ isLanding, menuOpen, setMenuOpen }) {
           </>
         )}
 
-        {!isLanding && (
+        {isLanding && user && (
+          <div className="desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <CreditsBadge credits={user.credits} />
+            <Link to="/dashboard"><Btn variant="primary" size="sm">Кабинет</Btn></Link>
+          </div>
+        )}
+
+        {!isLanding && !loading && user && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Link to="/dashboard"><Btn variant="outline" size="sm">Кабинет</Btn></Link>
+            <CreditsBadge credits={user.credits} />
+            <span style={{
+              color: C.gray500,
+              fontSize: '0.8125rem',
+              fontWeight: 500,
+              maxWidth: 180,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {user.email}
+            </span>
+            <button
+              onClick={handleLogout}
+              title="Выйти"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                border: `1px solid ${C.gray200}`,
+                background: C.white,
+                cursor: 'pointer',
+                color: C.gray500,
+                transition: 'all 0.2s',
+              }}
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
+        )}
+
+        {!isLanding && !loading && !user && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Link to="/login"><Btn variant="outline" size="sm">Войти</Btn></Link>
           </div>
         )}
       </div>
 
-      {menuOpen && isLanding && (
+      {menuOpen && isLanding && !user && (
         <div style={{
           padding: '12px 24px 24px',
           display: 'flex',
@@ -137,6 +188,25 @@ function Header({ isLanding, menuOpen, setMenuOpen }) {
         </div>
       )}
     </header>
+  );
+}
+
+function CreditsBadge({ credits }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      padding: '6px 12px',
+      borderRadius: 10,
+      background: C.primaryLight,
+      fontSize: '0.8125rem',
+      fontWeight: 600,
+      color: C.primaryDark,
+    }}>
+      <Sparkles size={14} />
+      {credits}
+    </div>
   );
 }
 

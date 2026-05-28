@@ -1,6 +1,8 @@
 import { Routes, Route } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
+import { AuthProvider } from './lib/auth.jsx';
 import Layout from './components/Layout.jsx';
+import ProtectedRoute from './components/ProtectedRoute.jsx';
 
 const HomePage = lazy(() => import('./pages/HomePage.jsx'));
 const LoginPage = lazy(() => import('./pages/LoginPage.jsx'));
@@ -21,20 +23,22 @@ function Loading() {
 
 export default function App() {
   return (
-    <Layout>
-      <Suspense fallback={<Loading />}>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/editor" element={<EditorPage />} />
-          <Route path="/editor/:id" element={<EditorPage />} />
-          <Route path="/project/:id" element={<ProjectPage />} />
-          <Route path="/publish/:id" element={<PublishPage />} />
-          <Route path="/billing" element={<BillingPage />} />
-          <Route path="/admin" element={<AdminPage />} />
-        </Routes>
-      </Suspense>
-    </Layout>
+    <AuthProvider>
+      <Layout>
+        <Suspense fallback={<Loading />}>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+            <Route path="/editor" element={<ProtectedRoute><EditorPage /></ProtectedRoute>} />
+            <Route path="/editor/:id" element={<ProtectedRoute><EditorPage /></ProtectedRoute>} />
+            <Route path="/project/:id" element={<ProtectedRoute><ProjectPage /></ProtectedRoute>} />
+            <Route path="/publish/:id" element={<ProtectedRoute><PublishPage /></ProtectedRoute>} />
+            <Route path="/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
+            <Route path="/admin" element={<AdminPage />} />
+          </Routes>
+        </Suspense>
+      </Layout>
+    </AuthProvider>
   );
 }
