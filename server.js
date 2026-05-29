@@ -19,7 +19,11 @@ app.get('/api/health', async (req, res) => {
     await pool.query('SELECT 1');
     db = true;
   } catch {}
-  res.json({ status: 'ok', db, timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok', db, timestamp: new Date().toISOString(),
+    gigachat_model: process.env.GIGACHAT_MODEL || '(default: GigaChat)',
+    gigachat_scope: process.env.GIGACHAT_SCOPE || '(default: GIGACHAT_API_PERS)',
+  });
 });
 
 // ── Auth: send OTP code ──
