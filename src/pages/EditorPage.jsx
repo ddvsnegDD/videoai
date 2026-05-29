@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, Clock, Palette, RefreshCw, ArrowLeft, Check, Info } from 'lucide-react';
 import { C } from '../lib/theme.js';
@@ -39,6 +39,11 @@ export default function EditorPage() {
 
   const step = jobId ? 2 : 1;
   const credits = user?.credits ?? 0;
+
+  // Refresh credits when job completes (partial refund may have changed balance)
+  useEffect(() => {
+    if (job?.status === 'done' || job?.status === 'failed') refresh();
+  }, [job?.status]);
 
   async function handleGenerate(e) {
     e.preventDefault();

@@ -144,8 +144,12 @@ async function generateOne({ topic, style, duration, tone }) {
 }
 
 export async function generateScenarios({ topic, style, duration }) {
+  // Stagger requests by 1.5s to avoid GigaChat PERS rate limits
   const results = await Promise.allSettled(
-    TONES.map(tone => generateOne({ topic, style, duration, tone }))
+    TONES.map((tone, i) =>
+      new Promise(resolve => setTimeout(resolve, i * 1500))
+        .then(() => generateOne({ topic, style, duration, tone }))
+    )
   );
 
   const scenarios = [];
