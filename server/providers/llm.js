@@ -9,7 +9,7 @@ export const CREDITS_COST = 1;
 
 const OAUTH_URL = 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth';
 const CHAT_URL = 'https://gigachat.devices.sberbank.ru/api/v1/chat/completions';
-const MODEL = process.env.GIGACHAT_MODEL || 'GigaChat-Plus';
+const MODEL = process.env.GIGACHAT_MODEL || 'GigaChat';
 const REQUEST_TIMEOUT = 60000;
 
 let cachedToken = null;
@@ -151,65 +151,4 @@ export async function listModels() {
     headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
   });
   return res.json();
-}
-
-export async function testChat() {
-  const authKey = process.env.GIGACHAT_AUTH_KEY;
-  if (!authKey) return { error: 'GIGACHAT_AUTH_KEY not set' };
-
-  const scopes = ['GIGACHAT_API_PERS', 'GIGACHAT_API_CORP', 'GIGACHAT_API_B2B'];
-  const models = ['GigaChat', 'GigaChat-Plus', 'GigaChat-2', 'GigaChat-Pro'];
-  const testMessages = [{ role: 'user', content: 'Привет, ответь одним словом.' }];
-
-  const results = [];
-
-  for (const scope of scopes) {
-    // Get token for this scope
-    let token;
-    try {
-      const oauthRes = await fetchGC(OAUTH_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json',
-          'Authorization': `Basic ${authKey}`,
-          'RqUID': randomUUID(),
-        },
-        body: `scope=${scope}`,
-      });
-      if (!oauthRes.ok) {
-        const text = await oauthRes.text().catch(() => '');
-        results.push({ scope, error: `OAuth ${oauthRes.status}: ${text}` });
-        continue;
-      }
-      const oauthData = await oauthRes.json();
-      token = oauthData.access_token;
-    } catch (e) {
-      results.push({ scope, error: `OAuth exception: ${e.message}` });
-      continue;
-    }
-
-    // Try each model with this scope's token
-    for (const model of models) {
-      try {
-        const chatRes = await fetchGC(CHAT_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${token}`,
-            'X-Request-ID': randomUUID(),
-          },
-          body: JSON.stringify({ model, messages: testMessages, max_tokens: 10 }),
-        });
-        const body = await chatRes.text();
-        results.push({ scope, model, status: chatRes.status, body: body.substring(0, 300) });
-        if (chatRes.ok) return { found: true, scope, model, results }; // early exit on success
-      } catch (e) {
-        results.push({ scope, model, error: e.message });
-      }
-    }
-  }
-
-  return { found: false, results };
 }

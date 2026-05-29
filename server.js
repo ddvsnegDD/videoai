@@ -4,7 +4,7 @@ import { resolve, join } from 'path';
 import pool, { initDB } from './server/db.js';
 import { sendCode, verifyCode, requireAuth, getMe } from './server/auth.js';
 import { createJob, getJob, listJobs, runWatchdog } from './server/jobs.js';
-import { CREDITS_COST, listModels } from './server/providers/llm.js';
+import { CREDITS_COST } from './server/providers/llm.js';
 
 const app = express();
 const DIST = resolve('dist');
@@ -222,26 +222,7 @@ app.get('/api/jobs', requireAuth, async (req, res) => {
   }
 });
 
-// ── Debug: list GigaChat models (temporary) ──
-app.get('/api/debug/models', requireAuth, async (req, res) => {
-  try {
-    const data = await listModels();
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── Debug: test chat completion with multiple models + scopes (temporary) ──
-app.get('/api/debug/test-chat', requireAuth, async (req, res) => {
-  try {
-    const { testChat } = await import('./server/providers/llm.js');
-    const results = await testChat();
-    res.json(results);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// Debug endpoints removed — GigaChat confirmed working
 
 // ── Static + SPA fallback (ALWAYS LAST) ──
 app.use(express.static(DIST));
