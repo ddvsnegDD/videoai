@@ -1,5 +1,16 @@
 import pool from './db.js';
 import { generateScenarios, CREDITS_COST, CREDITS_PER_SCENARIO } from './providers/llm.js';
+import { generateImage, CREDITS_COST as IMAGE_COST } from './providers/image.js';
+import { synthesize, CREDITS_COST as TTS_COST } from './providers/tts.js';
+
+const SCENE_COST = IMAGE_COST + TTS_COST; // 3 + 1 = 4 per scene
+const WATCHDOG_TIMEOUT_MIN = 15; // minutes — increased for storyboard tasks
+
+export { CREDITS_COST, CREDITS_PER_SCENARIO, IMAGE_COST, TTS_COST, SCENE_COST };
+
+export function calculateStoryboardCost(scenesCount) {
+  return scenesCount * SCENE_COST;
+}
 
 export async function createJob({ userId, projectId, type, input, costCredits }) {
   const client = await pool.connect();
@@ -72,13 +83,13 @@ async function runJob(jobId) {
     let result;
 
     try {
-      result = await executeType(type, input);
+      result = await executeType(type, input, jobId);
     } catch (err) {
       if (err.retryable) {
         const delay = err.code === 'RATE_LIMIT' ? 30000 : 5000;
         await new Promise(r => setTimeout(r, delay));
         try {
-          result = await executeType(type, input);
+          result = await executeType(type, input, jobId);
         } catch (retryErr) {
           return await failJob(jobId, user_id, cost_credits, retryErr.message);
         }
@@ -87,12 +98,19 @@ async function runJob(jobId) {
       }
     }
 
-    // Partial refund: return credits for failed scenarios
-    if (result.succeeded !== undefined && result.succeeded < 3) {
-      const refund = (3 - result.succeeded) * CREDITS_PER_SCENARIO;
-      if (refund > 0) {
-        await pool.query('UPDATE users SET credits = credits + $1 WHERE id = $2', [refund, user_id]);
-        console.log(`Partial refund: ${refund} credits returned to user ${user_id} (${result.succeeded}/3 scenarios)`);
+    // Handle partial refunds based on task type
+    if (type === 'script') {
+      if (result.succeeded !== undefined && result.succeeded < 3) {
+        const refund = (3 - result.succeeded) * CREDITS_PER_SCENARIO;
+        if (refund > 0) {
+          await pool.query('UPDATE users SET credits = credits + $1 WHERE id = $2', [refund, user_id]);
+          console.log(`Partial refund: ${refund} credits returned to user ${user_id} (${result.succeeded}/3 scenarios)`);
+        }
+      }
+    } else if (type === 'storyboard') {
+      if (result.refund_credits > 0) {
+        await pool.query('UPDATE users SET credits = credits + $1 WHERE id = $2', [result.refund_credits, user_id]);
+        console.log(`Storyboard partial refund: ${result.refund_credits} credits returned to user ${user_id}`);
       }
     }
 
@@ -116,11 +134,98 @@ async function runJob(jobId) {
   }
 }
 
-async function executeType(type, input) {
+async function executeType(type, input, jobId) {
   if (type === 'script') {
     return await generateScenarios(input);
   }
+  if (type === 'storyboard') {
+    return await runStoryboard(input, jobId);
+  }
   throw Object.assign(new Error(`Type '${type}' not implemented`), { retryable: false });
+}
+
+async function runStoryboard(input, jobId) {
+  const { projectId, scenario, voice } = input;
+  const scenes = scenario.scenes;
+  const totalScenes = scenes.length;
+  const tone = scenario.tone;
+
+  const scenesMedia = [];
+  let succeededScenes = 0;
+  let failedSteps = 0;
+  let refundCredits = 0;
+
+  for (let i = 0; i < totalScenes; i++) {
+    const scene = scenes[i];
+    const sceneResult = { sceneIndex: i, image_url: null, audio_url: null, ok: true };
+
+    // Generate image
+    const imgResult = await generateImage({
+      prompt: scene.description,
+      projectId,
+      sceneIndex: i,
+      tone,
+      style: input.style,
+    });
+
+    if (imgResult.ok) {
+      sceneResult.image_url = imgResult.data.url;
+    } else {
+      sceneResult.ok = false;
+      refundCredits += IMAGE_COST;
+      failedSteps++;
+      console.warn(`[Storyboard] Image failed for scene ${i}: ${imgResult.error}`);
+    }
+
+    // Synthesize audio
+    const ttsResult = await synthesize({
+      text: scene.description,
+      voice: voice || 'alena',
+      projectId,
+      sceneIndex: i,
+    });
+
+    if (ttsResult.ok) {
+      sceneResult.audio_url = ttsResult.data.url;
+    } else {
+      sceneResult.ok = false;
+      refundCredits += TTS_COST;
+      failedSteps++;
+      console.warn(`[Storyboard] TTS failed for scene ${i}: ${ttsResult.error}`);
+    }
+
+    if (sceneResult.image_url || sceneResult.audio_url) {
+      succeededScenes++;
+    }
+
+    scenesMedia.push(sceneResult);
+
+    // Update progress after each scene
+    const progress = Math.round(((i + 1) / totalScenes) * 100);
+    await pool.query(
+      `UPDATE generation_jobs SET progress = $1, updated_at = NOW() WHERE id = $2`,
+      [progress, jobId]
+    );
+  }
+
+  // If all scenes completely failed (no image AND no audio for every scene) — throw to trigger full refund
+  if (succeededScenes === 0) {
+    const err = new Error('All scenes failed to generate');
+    err.retryable = false;
+    throw err;
+  }
+
+  return {
+    ok: true,
+    data: {
+      scenes_media: scenesMedia,
+      total_scenes: totalScenes,
+      succeeded_scenes: succeededScenes,
+      failed_steps: failedSteps,
+      voice,
+    },
+    refund_credits: refundCredits,
+  };
 }
 
 async function failJob(jobId, userId, costCredits, errorMsg) {
@@ -137,7 +242,7 @@ export async function runWatchdog() {
   try {
     const stale = await pool.query(
       `SELECT id, user_id, cost_credits FROM generation_jobs
-       WHERE status = 'running' AND updated_at < NOW() - INTERVAL '10 minutes'`
+       WHERE status = 'running' AND updated_at < NOW() - INTERVAL '${WATCHDOG_TIMEOUT_MIN} minutes'`
     );
     for (const row of stale.rows) {
       await failJob(row.id, row.user_id, row.cost_credits, 'TIMEOUT (watchdog)');

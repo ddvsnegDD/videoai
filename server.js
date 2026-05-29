@@ -3,8 +3,8 @@ import cookieParser from 'cookie-parser';
 import { resolve, join } from 'path';
 import pool, { initDB } from './server/db.js';
 import { sendCode, verifyCode, requireAuth, getMe } from './server/auth.js';
-import { createJob, getJob, listJobs, runWatchdog } from './server/jobs.js';
-import { CREDITS_COST } from './server/providers/llm.js';
+import { createJob, getJob, listJobs, runWatchdog, CREDITS_COST, calculateStoryboardCost, IMAGE_COST, TTS_COST } from './server/jobs.js';
+import { VOICES } from './server/providers/tts.js';
 
 const app = express();
 const DIST = resolve('dist');
@@ -84,6 +84,11 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
 app.post('/api/auth/logout', (req, res) => {
   res.clearCookie('token', { path: '/' });
   res.json({ ok: true });
+});
+
+// ── Voices ──
+app.get('/api/voices', (req, res) => {
+  res.json({ voices: VOICES });
 });
 
 // ── Projects ──
@@ -178,12 +183,23 @@ app.post('/api/jobs', requireAuth, async (req, res) => {
     if (project.rows.length === 0) {
       return res.status(404).json({ error: 'project_not_found' });
     }
-    const costCredits = type === 'script' ? CREDITS_COST : 0;
+
+    let costCredits = 0;
+    if (type === 'script') {
+      costCredits = CREDITS_COST;
+    } else if (type === 'storyboard') {
+      const scenesCount = input.scenario?.scenes?.length;
+      if (!scenesCount || scenesCount < 1) {
+        return res.status(400).json({ error: 'invalid_scenario' });
+      }
+      costCredits = calculateStoryboardCost(scenesCount);
+    }
+
     const { jobId } = await createJob({
       userId: req.userId,
       projectId,
       type,
-      input,
+      input: { ...input, projectId },
       costCredits,
     });
     res.json({ jobId });

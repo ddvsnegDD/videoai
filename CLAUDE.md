@@ -52,7 +52,8 @@ mail_hosting: "VK WorkSpace (Mail.ru)"  # Входящая почта на до�
 
 - **Спринт 0 — ЗАВЕРШЁН.** Лендинг на Railway, домен ddvideoai.ru с HTTPS, базовая структура.
 - **Спринт 1 — ЗАВЕРШЁН.** Авторизация email OTP (Brevo), JWT в httpOnly cookie, кабинет, 30 приветственных кредитов. Таблицы `users`, `auth_codes` (с `attempts` для brute-force защиты). Безопасность: crypto.randomInt для OTP, обязательный JWT_SECRET (без fallback), лимит 5 попыток, rate limit 60 сек, очистка протухших кодов.
-- **Спринт 2 — В РАБОТЕ.** GigaChat (LLM), генерация сценариев, движок задач (jobs + polling), таблицы `projects` и `generation_jobs`, EditorPage.
+- **Спринт 2 — ЗАВЕРШЁН.** GigaChat (LLM), генерация сценариев, движок задач (jobs + polling), таблицы `projects` и `generation_jobs`, EditorPage.
+- **Спринт 3 — ЗАВЕРШЁН.** Yandex ART (картинки), SpeechKit (озвучка), Yandex Object Storage (S3), раскадровка сцен (storyboard), компонент Storyboard, выбор голоса.
 
 > При работе над новым спринтом не ломай и не переписывай код завершённых спринтов без явного указания.
 

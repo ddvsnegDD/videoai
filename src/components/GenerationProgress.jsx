@@ -1,7 +1,7 @@
 import { Check, AlertCircle, Loader2 } from 'lucide-react';
 import { C } from '../lib/theme.js';
 
-export default function GenerationProgress({ job }) {
+export default function GenerationProgress({ job, type = 'script' }) {
   if (!job) return null;
 
   if (job.status === 'done') {
@@ -27,7 +27,9 @@ export default function GenerationProgress({ job }) {
     );
   }
 
-  // pending / running
+  const isStoryboard = type === 'storyboard';
+  const progress = job.progress || 0;
+
   return (
     <div style={wrapStyle}>
       <Loader2
@@ -36,10 +38,10 @@ export default function GenerationProgress({ job }) {
         style={{ animation: 'spin 0.7s linear infinite', marginBottom: 16 }}
       />
       <p style={{ color: C.dark, fontWeight: 600, fontSize: '0.9375rem', marginBottom: 4 }}>
-        {job.status === 'pending' ? 'В очереди...' : 'Генерация...'}
+        {job.status === 'pending' ? 'В очереди...' : isStoryboard ? 'Рисую и озвучиваю сцены...' : 'Генерация...'}
       </p>
-      {job.progress > 0 && (
-        <div style={{ width: '100%', maxWidth: 240 }}>
+      {(progress > 0 || isStoryboard) && (
+        <div style={{ width: '100%', maxWidth: 280 }}>
           <div style={{
             height: 6,
             borderRadius: 3,
@@ -48,19 +50,21 @@ export default function GenerationProgress({ job }) {
           }}>
             <div style={{
               height: '100%',
-              width: `${job.progress}%`,
+              width: `${Math.max(progress, isStoryboard && job.status === 'running' ? 5 : 0)}%`,
               borderRadius: 3,
               background: `linear-gradient(90deg, ${C.primary}, ${C.primaryDark})`,
               transition: 'width 0.5s ease',
             }} />
           </div>
           <p style={{ color: C.gray400, fontSize: '0.75rem', textAlign: 'center', marginTop: 6 }}>
-            {job.progress}%
+            {progress}%
           </p>
         </div>
       )}
       <p style={{ color: C.gray400, fontSize: '0.8125rem', marginTop: 8 }}>
-        Придумываю 3 варианта... обычно 15-20 секунд
+        {isStoryboard
+          ? 'Генерация картинок и озвучки... обычно 1-3 минуты'
+          : 'Придумываю 3 варианта... обычно 15-20 секунд'}
       </p>
     </div>
   );
