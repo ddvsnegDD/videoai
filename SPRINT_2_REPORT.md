@@ -21,7 +21,7 @@
 | `src/pages/EditorPage.jsx` | Двухшаговый редактор: стоимость 3 кредита, бейджи тонов из `scenario.tone`, info-бар при частичном успехе |
 | `src/pages/ProjectPage.jsx` | Просмотр проекта: brief, сценарий со сценами, кнопка «Создать видео» |
 | `src/pages/DashboardPage.jsx` | Загрузка проектов из API, grid карточек, StatCards (кредиты, проекты, тариф) |
-| `src/components/GenerationProgress.jsx` | Spinner «Придумываю 3 варианта... обычно 30-40 секунд» |
+| `src/components/GenerationProgress.jsx` | Spinner «Придумываю 3 варианта... обычно 15-20 секунд» |
 | `src/components/ProjectCard.jsx` | Glassmorphism-карточка с hover, badge статуса, дата, длительность |
 | `src/lib/hooks.js` | `useJobPolling(jobId)`: polling 2с, авто-стоп при done/failed |
 | `src/lib/api.js` | Метод `patch` |
@@ -173,7 +173,7 @@ CREATE TABLE generation_jobs (
 | 2 | Кнопка disabled если тема пустая или кредитов < 3 | ✅ |
 | 3 | Показывает «Стоимость: 3 кредита (3 варианта). У вас: N» | ✅ |
 | 4 | Ввести тему → «Придумать сценарии» | ✅ |
-| 5 | Spinner «Придумываю 3 варианта... обычно 30-40 секунд», реально ~16 сек | ✅ |
+| 5 | Spinner «Придумываю 3 варианта... обычно 15-20 секунд», реально ~16 сек | ✅ |
 | 6 | 3 карточки: Уютный / Энергичный / Премиальный, бейджи соответствуют содержанию | ✅ |
 | 7 | «Выбрать этот сценарий» → redirect на `/project/:id` | ✅ |
 | 8 | ProjectPage: сценарий со сценами, длительность, кнопка «Создать видео» | ✅ |
