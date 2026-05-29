@@ -19,11 +19,7 @@ app.get('/api/health', async (req, res) => {
     await pool.query('SELECT 1');
     db = true;
   } catch {}
-  res.json({
-    status: 'ok', db, timestamp: new Date().toISOString(),
-    gigachat_model: process.env.GIGACHAT_MODEL || '(default: GigaChat)',
-    gigachat_scope: process.env.GIGACHAT_SCOPE || '(default: GIGACHAT_API_PERS)',
-  });
+  res.json({ status: 'ok', db, timestamp: new Date().toISOString() });
 });
 
 // ── Auth: send OTP code ──
@@ -225,8 +221,6 @@ app.get('/api/jobs', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'server_error' });
   }
 });
-
-// Debug endpoints removed — GigaChat confirmed working
 
 // ── Static + SPA fallback (ALWAYS LAST) ──
 app.use(express.static(DIST));

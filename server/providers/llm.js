@@ -91,7 +91,7 @@ async function chatCompletion(messages) {
       model: MODEL,
       messages,
       temperature: 0.87,
-      max_tokens: 2048,
+      max_tokens: 4096,
     }),
   });
 
