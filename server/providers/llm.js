@@ -130,7 +130,8 @@ export async function generateScenarios({ topic, style, duration }) {
   const parsed = parseScenariosResponse(rawText);
 
   if (!parsed.ok) {
-    throw makeError('PARSE_ERROR', 'Failed to parse LLM response');
+    console.error('LLM raw response (first 500 chars):', rawText.substring(0, 500));
+    throw makeError('PARSE_ERROR', `Failed to parse LLM response: ${rawText.substring(0, 200)}`);
   }
 
   return {
