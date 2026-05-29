@@ -3,7 +3,7 @@ import cookieParser from 'cookie-parser';
 import { resolve, join } from 'path';
 import pool, { initDB } from './server/db.js';
 import { sendCode, verifyCode, requireAuth, getMe } from './server/auth.js';
-import { createJob, getJob, listJobs, runWatchdog, CREDITS_COST, calculateStoryboardCost, IMAGE_COST, TTS_COST } from './server/jobs.js';
+import { createJob, getJob, listJobs, runWatchdog, CREDITS_COST, CREDITS_PER_VIDEO, CREDITS_PER_REGEN, MAX_SCENES } from './server/jobs.js';
 import { VOICES } from './server/providers/tts.js';
 
 const app = express();
@@ -84,6 +84,15 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
 app.post('/api/auth/logout', (req, res) => {
   res.clearCookie('token', { path: '/' });
   res.json({ ok: true });
+});
+
+// ── Config (public, used by frontend) ──
+app.get('/api/config', (req, res) => {
+  res.json({
+    CREDITS_PER_VIDEO,
+    CREDITS_PER_REGEN,
+    MAX_SCENES,
+  });
 });
 
 // ── Voices ──
@@ -192,7 +201,18 @@ app.post('/api/jobs', requireAuth, async (req, res) => {
       if (!scenesCount || scenesCount < 1) {
         return res.status(400).json({ error: 'invalid_scenario' });
       }
-      costCredits = calculateStoryboardCost(scenesCount);
+      // Enforce max scenes on backend
+      if (scenesCount > MAX_SCENES) {
+        input.scenario.scenes = input.scenario.scenes.slice(0, MAX_SCENES);
+      }
+      costCredits = CREDITS_PER_VIDEO;
+    } else if (type === 'regenerate_scene') {
+      if (input.sceneIndex === undefined || !input.scene) {
+        return res.status(400).json({ error: 'missing_scene_data' });
+      }
+      costCredits = CREDITS_PER_REGEN;
+    } else {
+      return res.status(400).json({ error: 'invalid_type' });
     }
 
     const { jobId } = await createJob({
@@ -238,6 +258,84 @@ app.get('/api/jobs', requireAuth, async (req, res) => {
   }
 });
 
+// ── Admin middleware ──
+async function requireAdmin(req, res, next) {
+  const token = req.cookies?.token;
+  if (!token) return res.status(401).json({ error: 'not_authenticated' });
+
+  try {
+    const jwt = await import('jsonwebtoken');
+    const payload = jwt.default.verify(token, process.env.JWT_SECRET);
+    req.userId = payload.userId;
+
+    const userRow = await pool.query('SELECT role FROM users WHERE id = $1', [req.userId]);
+    if (userRow.rows.length === 0 || userRow.rows[0].role !== 'admin') {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    next();
+  } catch {
+    return res.status(401).json({ error: 'invalid_token' });
+  }
+}
+
+// ── Admin routes ──
+app.get('/api/admin/users', requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT u.id, u.email, u.credits, u.role, u.created_at,
+             COUNT(p.id)::int AS projects_count
+      FROM users u
+      LEFT JOIN projects p ON p.user_id = u.id
+      GROUP BY u.id
+      ORDER BY u.created_at DESC
+      LIMIT 100
+    `);
+    res.json({ users: result.rows });
+  } catch (err) {
+    console.error('admin users error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.post('/api/admin/users/:id/credits', requireAdmin, async (req, res) => {
+  try {
+    const { amount } = req.body;
+    if (amount === undefined || typeof amount !== 'number') {
+      return res.status(400).json({ error: 'invalid_amount' });
+    }
+    const userId = Number(req.params.id);
+    const result = await pool.query(
+      `UPDATE users SET credits = GREATEST(credits + $1, 0) WHERE id = $2 RETURNING id, email, credits, role, created_at`,
+      [amount, userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'user_not_found' });
+    }
+    console.log(`[Admin] Credits adjusted for user ${userId}: ${amount > 0 ? '+' : ''}${amount}. New balance: ${result.rows[0].credits}`);
+    res.json({ user: result.rows[0] });
+  } catch (err) {
+    console.error('admin credits error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.get('/api/admin/jobs', requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT j.id, u.email AS user_email, j.type, j.status, j.cost_credits,
+             j.error, j.created_at, j.updated_at
+      FROM generation_jobs j
+      JOIN users u ON u.id = j.user_id
+      ORDER BY j.created_at DESC
+      LIMIT 50
+    `);
+    res.json({ jobs: result.rows });
+  } catch (err) {
+    console.error('admin jobs error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
 // ── Static + SPA fallback (ALWAYS LAST) ──
 app.use(express.static(DIST));
 app.get('/{*splat}', (req, res) => {
@@ -253,6 +351,22 @@ async function start() {
       console.log('Database initialized');
     } catch (err) {
       console.warn('DB init warning:', err.message);
+    }
+
+    // Promote admin on startup
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (adminEmail) {
+      try {
+        const res = await pool.query(
+          `UPDATE users SET role = 'admin' WHERE email = $1 AND role != 'admin' RETURNING email`,
+          [adminEmail.trim().toLowerCase()]
+        );
+        if (res.rows.length > 0) {
+          console.log(`[Admin] Promoted ${res.rows[0].email} to admin`);
+        }
+      } catch (err) {
+        console.warn('Admin promotion warning:', err.message);
+      }
     }
   } else {
     console.warn('DATABASE_URL not set — auth disabled');

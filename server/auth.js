@@ -13,7 +13,7 @@ const OTP_EXPIRY_MIN = 10;
 const OTP_RATE_LIMIT_SEC = 60;
 const MAX_ATTEMPTS = 5;
 const JWT_EXPIRY = '30d';
-const WELCOME_CREDITS = 30;
+const WELCOME_CREDITS = Number(process.env.WELCOME_CREDITS) || 50;
 
 function generateCode() {
   return String(randomInt(100000, 1000000));

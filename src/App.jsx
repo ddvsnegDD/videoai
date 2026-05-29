@@ -35,7 +35,7 @@ export default function App() {
             <Route path="/project/:id" element={<ProtectedRoute><ProjectPage /></ProtectedRoute>} />
             <Route path="/publish/:id" element={<ProtectedRoute><PublishPage /></ProtectedRoute>} />
             <Route path="/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
-            <Route path="/admin" element={<AdminPage />} />
+            <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
           </Routes>
         </Suspense>
       </Layout>

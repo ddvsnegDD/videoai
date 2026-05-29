@@ -1,8 +1,7 @@
-import { Image, Volume2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Image, Volume2, AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
 import { C } from '../lib/theme.js';
-import Btn from './Btn.jsx';
 
-export default function Storyboard({ scenes, scenesMedia }) {
+export default function Storyboard({ scenes, scenesMedia, credits = 0, regenCost = 3, onRegenerate, regeneratingIndex }) {
   if (!scenes || !scenesMedia) return null;
 
   return (
@@ -19,6 +18,10 @@ export default function Storyboard({ scenes, scenesMedia }) {
             imageUrl={media.image_url}
             audioUrl={media.audio_url}
             failed={hasFailed}
+            credits={credits}
+            regenCost={regenCost}
+            onRegenerate={onRegenerate}
+            isRegenerating={regeneratingIndex === i}
           />
         );
       })}
@@ -26,7 +29,9 @@ export default function Storyboard({ scenes, scenesMedia }) {
   );
 }
 
-function SceneCard({ index, scene, imageUrl, audioUrl, failed }) {
+function SceneCard({ index, scene, imageUrl, audioUrl, failed, credits, regenCost, onRegenerate, isRegenerating }) {
+  const canRegen = onRegenerate && credits >= regenCost && !isRegenerating;
+
   return (
     <div style={{
       background: C.white,
@@ -77,9 +82,7 @@ function SceneCard({ index, scene, imageUrl, audioUrl, failed }) {
             </div>
           </div>
         ) : (
-          <div style={{
-            display: 'none',
-          }} />
+          <div style={{ display: 'none' }} />
         )}
 
         {/* Content */}
@@ -179,38 +182,41 @@ function SceneCard({ index, scene, imageUrl, audioUrl, failed }) {
             }}>
               <AlertTriangle size={14} color="#92400E" />
               <span style={{ fontSize: '0.8125rem', color: '#92400E' }}>
-                Не удалось сгенерировать, кредиты возвращены
+                Не удалось сгенерировать
               </span>
             </div>
           )}
 
-          {/* Regenerate stub */}
-          {(imageUrl || audioUrl) && (
+          {/* Regenerate button */}
+          {onRegenerate && (
             <div style={{ marginTop: 12 }}>
               <button
-                onClick={() => {
-                  // TODO: individual scene regeneration
-                  const event = new CustomEvent('toast', {
-                    detail: { message: 'Перегенерация отдельных сцен будет в следующем обновлении', type: 'info' },
-                  });
-                  window.dispatchEvent(event);
-                }}
+                onClick={() => canRegen && onRegenerate(index)}
+                disabled={!canRegen}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 4,
                   background: 'none',
                   border: 'none',
-                  color: C.gray400,
+                  color: isRegenerating ? C.primary : canRegen ? C.gray400 : C.gray300,
                   fontSize: '0.75rem',
-                  cursor: 'pointer',
+                  cursor: canRegen ? 'pointer' : 'default',
                   padding: 0,
                   transition: 'color 0.2s',
                 }}
-                onMouseEnter={e => e.currentTarget.style.color = C.primary}
-                onMouseLeave={e => e.currentTarget.style.color = C.gray400}
+                onMouseEnter={e => { if (canRegen) e.currentTarget.style.color = C.primary; }}
+                onMouseLeave={e => { if (canRegen) e.currentTarget.style.color = C.gray400; }}
               >
-                <RefreshCw size={11} /> Перегенерировать
+                {isRegenerating ? (
+                  <>
+                    <Loader2 size={11} style={{ animation: 'spin 0.7s linear infinite' }} /> Генерация...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={11} /> Перегенерировать ({regenCost} кр.)
+                  </>
+                )}
               </button>
             </div>
           )}

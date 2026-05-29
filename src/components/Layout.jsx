@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Play, Menu, X, LogOut, Sparkles } from 'lucide-react';
+import { Play, Menu, X, LogOut, Sparkles, Shield } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { C } from '../lib/theme.js';
 import { useAuth } from '../lib/auth.jsx';
@@ -128,6 +128,17 @@ function Header({ isLanding, menuOpen, setMenuOpen }) {
 
         {!isLanding && !loading && user && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {user.role === 'admin' && (
+              <Link to="/admin" style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                padding: '6px 10px', borderRadius: 8,
+                background: C.primaryLight, color: C.primaryDark,
+                fontSize: '0.75rem', fontWeight: 600,
+                textDecoration: 'none',
+              }}>
+                <Shield size={12} /> Админка
+              </Link>
+            )}
             <CreditsBadge credits={user.credits} />
             <span style={{
               color: C.gray500,

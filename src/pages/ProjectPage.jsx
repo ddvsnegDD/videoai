@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Film, Clock, Info, Mic, Sparkles, RefreshCw, ImageIcon } from 'lucide-react';
 import { C } from '../lib/theme.js';
@@ -10,7 +10,8 @@ import Btn from '../components/Btn.jsx';
 import GenerationProgress from '../components/GenerationProgress.jsx';
 import Storyboard from '../components/Storyboard.jsx';
 
-const SCENE_COST = 4; // IMAGE_COST (3) + TTS_COST (1)
+const DEFAULT_VIDEO_COST = 25;
+const DEFAULT_REGEN_COST = 3;
 
 export default function ProjectPage() {
   const { id } = useParams();
@@ -24,6 +25,14 @@ export default function ProjectPage() {
   const [error, setError] = useState('');
   const [jobId, setJobId] = useState(null);
   const { job } = useJobPolling(jobId);
+  const [config, setConfig] = useState(null);
+
+  // Load server config (credits costs)
+  useEffect(() => {
+    api.get('/config')
+      .then(setConfig)
+      .catch(() => setConfig({ CREDITS_PER_VIDEO: DEFAULT_VIDEO_COST, CREDITS_PER_REGEN: DEFAULT_REGEN_COST }));
+  }, []);
 
   useEffect(() => {
     api.get(`/projects/${id}`)
@@ -31,6 +40,12 @@ export default function ProjectPage() {
       .catch(() => navigate('/dashboard', { replace: true }))
       .finally(() => setLoading(false));
   }, [id, navigate]);
+
+  const reloadProject = useCallback(() => {
+    api.get(`/projects/${id}`)
+      .then(data => setProject(data.project))
+      .catch(() => {});
+  }, [id]);
 
   // When storyboard job completes — save result to project brief
   useEffect(() => {
@@ -52,9 +67,32 @@ export default function ProjectPage() {
         .then(data => setProject(data.project))
         .catch(err => console.error('Failed to save storyboard:', err));
     }
+
+    // Handle regenerate_scene completion
+    if (job.status === 'done' && job.output?.sceneIndex !== undefined) {
+      const brief = typeof project.brief === 'string' ? JSON.parse(project.brief) : project.brief;
+      const scenesMedia = [...(brief.scenes_media || [])];
+      const idx = job.output.sceneIndex;
+      if (scenesMedia[idx]) {
+        scenesMedia[idx] = {
+          ...scenesMedia[idx],
+          image_url: job.output.image_url || scenesMedia[idx].image_url,
+          audio_url: job.output.audio_url || scenesMedia[idx].audio_url,
+          ok: !!(job.output.image_url && job.output.audio_url),
+        };
+        api.patch(`/projects/${id}`, {
+          brief: { ...brief, scenes_media: scenesMedia },
+        })
+          .then(data => {
+            setProject(data.project);
+            setJobId(null);
+          })
+          .catch(err => console.error('Failed to save regen result:', err));
+      }
+    }
   }, [job?.status]);
 
-  if (loading) {
+  if (loading || !config) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
         <div className="spinner" />
@@ -64,16 +102,17 @@ export default function ProjectPage() {
 
   if (!project) return null;
 
+  const videoCost = config.CREDITS_PER_VIDEO || DEFAULT_VIDEO_COST;
+  const regenCost = config.CREDITS_PER_REGEN || DEFAULT_REGEN_COST;
   const brief = typeof project.brief === 'string' ? JSON.parse(project.brief) : project.brief;
   const scenario = brief?.selectedScenario;
   const scenesMedia = brief?.scenes_media;
   const totalSec = scenario?.scenes?.reduce((s, sc) => s + sc.duration_sec, 0) || 0;
   const scenesCount = scenario?.scenes?.length || 0;
-  const totalCost = scenesCount * SCENE_COST;
   const credits = user?.credits ?? 0;
   const hasStoryboard = scenesMedia && scenesMedia.length > 0;
 
-  // Debug: log brief to check data shape
+  // Debug
   console.log('[ProjectPage] brief:', JSON.stringify({
     hasScenario: !!scenario,
     scenesCount,
@@ -103,7 +142,7 @@ export default function ProjectPage() {
       refresh();
     } catch (err) {
       if (err.data?.error === 'INSUFFICIENT_CREDITS') {
-        setError(`Недостаточно кредитов. Нужно ${totalCost} кредитов.`);
+        setError(`Недостаточно кредитов. Нужно ${videoCost} кредитов.`);
       } else {
         setError('Ошибка при создании задачи');
       }
@@ -118,7 +157,35 @@ export default function ProjectPage() {
     refresh();
   }
 
-  const showPartialInfo = job?.status === 'done' && job.output?.failed_steps > 0;
+  async function handleRegenerateScene(sceneIndex) {
+    if (!scenario || !scenesMedia) return;
+    const scene = scenario.scenes[sceneIndex];
+    if (!scene) return;
+
+    try {
+      const res = await api.post('/jobs', {
+        projectId: Number(id),
+        type: 'regenerate_scene',
+        input: {
+          sceneIndex,
+          scene,
+          voice: brief?.voice || 'alena',
+          tone: scenario.tone,
+          style: brief?.style,
+        },
+      });
+      setJobId(res.jobId);
+      refresh();
+    } catch (err) {
+      if (err.data?.error === 'INSUFFICIENT_CREDITS') {
+        alert(`Недостаточно кредитов. Нужно ${regenCost}.`);
+      } else {
+        alert('Ошибка при перегенерации сцены');
+      }
+    }
+  }
+
+  const isRegenJob = jobId && job?.status && job.output?.sceneIndex !== undefined;
 
   return (
     <div style={{ paddingTop: 96, paddingBottom: 80, minHeight: '100vh', background: C.bg }}>
@@ -262,13 +329,13 @@ export default function ProjectPage() {
                   flexWrap: 'wrap', gap: 12,
                 }}>
                   <p style={{ color: C.gray400, fontSize: '0.8125rem' }}>
-                    {scenesCount} сцен × {SCENE_COST} = <strong style={{ color: C.primary }}>{totalCost} кредитов</strong>.
+                    Создание ролика: <strong style={{ color: C.primary }}>{videoCost} кредитов</strong>.
                     У вас: <strong>{credits}</strong>
                   </p>
                   <Btn
                     variant="primary"
                     size="md"
-                    disabled={generating || credits < totalCost}
+                    disabled={generating || credits < videoCost}
                     onClick={handleGenerateStoryboard}
                   >
                     {generating ? (
@@ -285,7 +352,7 @@ export default function ProjectPage() {
             )}
 
             {/* Active storyboard job — progress */}
-            {jobId && (!job || job.status === 'pending' || job.status === 'running') && (
+            {jobId && (!job || job.status === 'pending' || job.status === 'running') && !isRegenJob && (
               <div style={{
                 background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 16,
               }}>
@@ -294,7 +361,7 @@ export default function ProjectPage() {
             )}
 
             {/* Storyboard job failed */}
-            {jobId && job?.status === 'failed' && (
+            {jobId && job?.status === 'failed' && !isRegenJob && (
               <div style={{
                 background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 16,
               }}>
@@ -309,19 +376,13 @@ export default function ProjectPage() {
 
             {/* Storyboard job completed inline (before saving to project) */}
             {jobId && job?.status === 'done' && job.output?.scenes_media && !hasStoryboard && (
-              <>
-                {showPartialInfo && (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px',
-                    background: '#FEF3C7', borderRadius: 12, marginBottom: 20,
-                    fontSize: '0.8125rem', color: '#92400E',
-                  }}>
-                    <Info size={16} />
-                    Часть сцен не удалось сгенерировать. Кредиты за неудачные шаги возвращены.
-                  </div>
-                )}
-                <Storyboard scenes={scenario.scenes} scenesMedia={job.output.scenes_media} />
-              </>
+              <Storyboard
+                scenes={scenario.scenes}
+                scenesMedia={job.output.scenes_media}
+                credits={credits}
+                regenCost={regenCost}
+                onRegenerate={handleRegenerateScene}
+              />
             )}
           </div>
         )}
@@ -340,7 +401,14 @@ export default function ProjectPage() {
                 Раскадровка
               </h2>
             </div>
-            <Storyboard scenes={scenario.scenes} scenesMedia={scenesMedia} />
+            <Storyboard
+              scenes={scenario.scenes}
+              scenesMedia={scenesMedia}
+              credits={credits}
+              regenCost={regenCost}
+              onRegenerate={handleRegenerateScene}
+              regeneratingIndex={jobId && job && (job.status === 'pending' || job.status === 'running') ? job.output?.sceneIndex ?? null : null}
+            />
 
             <div style={{ marginTop: 24 }}>
               <Btn
