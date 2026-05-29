@@ -4,7 +4,7 @@ import { resolve, join } from 'path';
 import pool, { initDB } from './server/db.js';
 import { sendCode, verifyCode, requireAuth, getMe } from './server/auth.js';
 import { createJob, getJob, listJobs, runWatchdog } from './server/jobs.js';
-import { CREDITS_COST } from './server/providers/llm.js';
+import { CREDITS_COST, listModels } from './server/providers/llm.js';
 
 const app = express();
 const DIST = resolve('dist');
@@ -219,6 +219,16 @@ app.get('/api/jobs', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('list jobs error:', err);
     res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// ── Debug: list GigaChat models (temporary) ──
+app.get('/api/debug/models', requireAuth, async (req, res) => {
+  try {
+    const data = await listModels();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

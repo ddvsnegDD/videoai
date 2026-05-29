@@ -144,3 +144,11 @@ export async function generateIdeas({ niche, count = 5 }) {
   // Stub — будет реализовано в будущих спринтах
   throw makeError('PROVIDER_ERROR', 'generateIdeas not implemented yet');
 }
+
+export async function listModels() {
+  const token = await getToken();
+  const res = await fetchGC('https://gigachat.devices.sberbank.ru/api/v1/models', {
+    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+  });
+  return res.json();
+}
