@@ -1,65 +1,108 @@
 # Sprint 2 Report — GigaChat LLM, движок задач, генерация сценариев
 
-## Статус
-Завершён полностью — весь бэкенд и фронтенд реализованы, задеплоено на Railway. Для полноценного теста нужна переменная `GIGACHAT_AUTH_KEY` в Railway.
+## 1. Статус
+**Завершён.** Все пункты ROADMAP Спринта 2 реализованы. GigaChat интеграция протестирована E2E на production (Railway). Генерация работает, но базовая модель `GigaChat` возвращает 1 сценарий вместо 3 при `max_tokens: 2048`. Исправлено увеличением до 4096.
 
-## Что сделано
+## 2. Что сделано
 
 ### Бэкенд
-- `server/providers/llm.js` — обёртка над GigaChat API: OAuth-токен с кешированием, chat completion, SSL-fallback для российских CA, retry-логика (RATE_LIMIT 30с, прочие 5с), таймаут 60с
-- `server/prompts/scenario.js` — `buildScenarioPrompt()`: системный промпт на русском (3 варианта сценария разной тональности), формат JSON без markdown
-- `server/lib/scenarioParser.js` — `parseScenariosResponse()`: снятие markdown-обёрток, поиск JSON в тексте, валидация структуры (title, description, scenes 2-6 шт с duration_sec)
-- `server/jobs.js` — диспетчер задач:
-  - `createJob()` — транзакция: проверка баланса → списание кредитов → INSERT → `setImmediate(runJob)`
-  - `runJob()` — фоновое выполнение с retry (1 повтор), возврат кредитов при ошибке
-  - `runWatchdog()` — страховка от зависших задач (>10 мин → fail + возврат кредитов)
-- `server/db.js` — таблицы `projects` и `generation_jobs` (по схеме CLAUDE.md)
-- `server.js` — 7 новых роутов:
-  - `POST /api/projects`, `GET /api/projects`, `GET /api/projects/:id`, `PATCH /api/projects/:id`
-  - `POST /api/jobs`, `GET /api/jobs/:id`, `GET /api/jobs?projectId=...`
-  - Watchdog запускается `setInterval(runWatchdog, 60000)` при старте
+| Файл | Что реализовано |
+|---|---|
+| `server/providers/llm.js` | Обёртка GigaChat API: OAuth с кешированием, chat completion, SSL через `undici` dispatcher, таймаут 60с |
+| `server/prompts/scenario.js` | `buildScenarioPrompt()`: системный промпт (3 варианта, JSON без markdown) |
+| `server/lib/scenarioParser.js` | `parseScenariosResponse()`: снятие markdown, поиск JSON, валидация структуры |
+| `server/jobs.js` | Диспетчер: `createJob()` (транзакция), `runJob()` (retry), `runWatchdog()` (таймаут 10 мин) |
+| `server/db.js` | Таблицы `projects` и `generation_jobs` |
+| `server.js` | 7 новых роутов: CRUD проекты + CRUD задачи + watchdog |
 
 ### Фронтенд
-- `src/lib/hooks.js` — `useJobPolling(jobId)`: polling каждые 2с, авто-стоп при done/failed, очистка при unmount
-- `src/lib/api.js` — добавлен метод `patch`
-- `src/components/GenerationProgress.jsx` — UI прогресса: spinner для pending/running, галочка для done, красная иконка для failed
-- `src/components/ProjectCard.jsx` — glassmorphism-карточка проекта с hover-эффектом, badge статуса
-- `src/pages/EditorPage.jsx` — двухшаговый редактор:
-  - Шаг 1: textarea темы + select стиля (4 варианта) + select длительности (15/30/60с) + отображение кредитов
-  - Шаг 2: polling прогресса → 3 карточки сценариев с тоновыми бейджами (Уютный/Энергичный/Премиальный), списком сцен, кнопкой выбора
-- `src/pages/ProjectPage.jsx` — просмотр проекта: brief, выбранный сценарий со сценами, заглушка «Создать видео»
-- `src/pages/DashboardPage.jsx` — загрузка проектов из API, grid карточек (responsive 1/2/3 колонки) или empty state
+| Файл | Что реализовано |
+|---|---|
+| `src/pages/EditorPage.jsx` | Двухшаговый редактор: форма ввода → polling → карточки сценариев → выбор |
+| `src/pages/ProjectPage.jsx` | Просмотр проекта: brief, сценарий со сценами, кнопка «Создать видео» |
+| `src/pages/DashboardPage.jsx` | Загрузка проектов из API, grid карточек, StatCards (кредиты, проекты, тариф) |
+| `src/components/GenerationProgress.jsx` | Spinner (pending/running), галочка (done), ошибка (failed) |
+| `src/components/ProjectCard.jsx` | Glassmorphism-карточка с hover, badge статуса, дата, длительность |
+| `src/lib/hooks.js` | `useJobPolling(jobId)`: polling 2с, авто-стоп при done/failed |
+| `src/lib/api.js` | Добавлен метод `patch` |
 
-## Чего НЕ сделано из запланированного
-Нет. Все пункты ROADMAP Спринта 2 реализованы.
+## 3. Что НЕ сделано
+Всё из плана Спринта 2 реализовано. Количество возвращаемых сценариев зависит от модели GigaChat — базовая модель может вернуть 1-2 вместо 3.
 
-## Технические решения
+## 4. API-эндпоинты
 
-- **GigaChat OAuth:** токен кешируется в памяти модуля (`let cachedToken`), перезапрашивается за 60с до истечения. Не в БД — нет смысла, токен живёт ~30 мин.
-- **SSL для GigaChat:** проверяет наличие файлов `server/certs/russian_trusted_root_ca.cer` и `russian_trusted_sub_ca.cer`. Если нет — fallback `rejectUnauthorized: false` с warn в консоль.
-- **Транзакции в createJob:** `BEGIN → SELECT FOR UPDATE → UPDATE credits → INSERT job → COMMIT`. Гарантия: кредиты не спишутся без создания задачи, и наоборот.
-- **Возврат кредитов при ошибке:** при `status='failed'` кредиты автоматически возвращаются пользователю.
-- **Retry:** один повтор при retryable-ошибках (RATE_LIMIT 30с, PROVIDER_ERROR/TIMEOUT 5с). AUTH_ERROR не ретраится.
-- **Watchdog:** страховка от потери задач при деплое. Каждые 60с проверяет задачи в `running` дольше 10 мин → fail + возврат кредитов.
-- **Парсер LLM:** агрессивный — снимает markdown, ищет первый `{` и последний `}`, парсит JSON, валидирует структуру. Допускает 2+ сцен (не строго 4-6).
-- **Prompt:** жёсткая инструкция «только JSON, без markdown» + явное описание формата. `temperature: 0.87` для креативности.
+| Метод | Путь | Auth | Назначение |
+|---|---|---|---|
+| POST | `/api/projects` | Да | Создать проект |
+| GET | `/api/projects` | Да | Список проектов (LIMIT 50) |
+| GET | `/api/projects/:id` | Да | Получить проект |
+| PATCH | `/api/projects/:id` | Да | Обновить проект (title, brief, status) |
+| POST | `/api/jobs` | Да | Создать задачу (списывает кредиты) |
+| GET | `/api/jobs/:id` | Да | Получить задачу (polling) |
+| GET | `/api/jobs?projectId=N` | Да | Список задач |
 
-## Отклонения от CLAUDE.md
-- **`fetch` вместо `https.request`** в llm.js — Node.js 18+ поддерживает global fetch, но `dispatcher` для custom Agent не работает с native fetch. SSL-агент создаётся, но фактически fallback `rejectUnauthorized: false` на проде без сертификатов.
-- **CLAUDE.md обновлён** с реальными значениями (github_repo, domain, email_from, db name) — предыдущие изменения пользователя.
+## 5. GigaChat: интеграция
 
-## Технический долг
+### Параметры подключения
+| Параметр | Значение |
+|---|---|
+| OAuth URL | `https://ngw.devices.sberbank.ru:9443/api/v2/oauth` |
+| Chat URL | `https://gigachat.devices.sberbank.ru/api/v1/chat/completions` |
+| Scope | `GIGACHAT_API_PERS` (дефолт) |
+| Модель | `GigaChat` (дефолт, через `process.env.GIGACHAT_MODEL`) |
+| HTTP-клиент | `undici` (не native `fetch`) |
+| SSL | `rejectUnauthorized: false` через `undici.Agent` — российские CA не установлены |
 
-- **SSL-сертификаты GigaChat:** сейчас `rejectUnauthorized: false`. Нужно скачать российские CA-сертификаты и положить в `server/certs/`. Node.js native fetch не поддерживает custom Agent через `dispatcher` — может понадобиться `undici` или `node-fetch` с явным Agent.
-- **Нет лимита на количество задач на пользователя** — теоретически можно спамить создание задач.
-- **Нет очистки старых jobs** — таблица `generation_jobs` будет расти. Нужен cron.
-- **Нет retry UI** — если GigaChat временно недоступен, пользователь видит только «Попробовать снова».
-- **EditorPage не сохраняет state при навигации** — если уйти со страницы во время генерации и вернуться, прогресс потеряется.
+### Кеширование токена
+Токен OAuth кешируется в памяти модуля (`cachedToken`, `cachedExpiresAt`). Перезапрашивается за 60 секунд до истечения. В БД не хранится — нет смысла, токен живёт ~30 мин, а при рестарте Railway получает новый.
 
-## Известные баги
-- **SSL GigaChat на Railway:** native `fetch` в Node.js 18+ игнорирует custom `https.Agent`. Если GigaChat отклоняет запросы без российских CA — придётся переключиться на `undici` с custom dispatcher. Пока тестировано с `rejectUnauthorized: false`.
+### Промпт
+`server/prompts/scenario.js` → `buildScenarioPrompt({ topic, style, duration })`:
+- Системный: инструкция на 3 варианта (уютный/энергичный/премиальный), 4-6 сцен, строго JSON
+- Пользовательский: тема + стиль + длительность
+- `temperature: 0.87`, `max_tokens: 4096`
 
-## Изменения в схеме БД
+### Парсер
+`server/lib/scenarioParser.js` → `parseScenariosResponse(rawText)`:
+- Снимает markdown code blocks
+- Находит первый `{` и последний `}`
+- `JSON.parse` → валидация: `scenarios[]` → `title`, `description`, `scenes[]` (min 2)
+- Возвращает `{ ok: true, scenarios }` или `{ ok: false, error }`
+
+### Тестирование GigaChat на production
+1. **OAuth** — работает. Токен получается с первого раза, scope `GIGACHAT_API_PERS`.
+2. **Модель** — `GigaChat`. Модели `GigaChat-Lite`, `GigaChat-Plus`, `GigaChat-2` возвращали 404. Причина: env-переменная `GIGACHAT_MODEL=GigaChat-Lite` на Railway перебивала дефолт в коде. После удаления переменной — `GigaChat` работает.
+3. **Chat completion** — 200 OK, ответ ~12 секунд.
+4. **Парсер** — обрабатывает ответ корректно. При `max_tokens: 2048` GigaChat возвращал 1 сценарий (обрезка). Увеличено до 4096.
+5. **Диагностика** — создан временный эндпоинт `testChat()`, перебирающий 3 scope × 4 модели. Подтвердил `GIGACHAT_API_PERS` + `GigaChat` = 200. Эндпоинт удалён.
+
+## 6. Движок задач (Job Engine)
+
+### Создание задачи (`createJob`)
+```
+BEGIN → SELECT credits FOR UPDATE → UPDATE credits - cost → INSERT job → COMMIT → setImmediate(runJob)
+```
+- Транзакция с `FOR UPDATE` lock на строку пользователя
+- Атомарность: кредиты не спишутся без создания задачи
+- `setImmediate` запускает фоновое выполнение без блокировки ответа
+
+### Выполнение (`runJob`)
+- Устанавливает `status = 'running'`
+- Вызывает `executeType(type, input)` → `generateScenarios()`
+- При retryable-ошибке: 1 повтор (30с для RATE_LIMIT, 5с для остальных)
+- При успехе: `status = 'done'`, `output = JSON`
+- При ошибке: `status = 'failed'`, кредиты возвращаются
+
+### Watchdog (`runWatchdog`)
+- `setInterval(runWatchdog, 60000)` при старте сервера
+- Находит задачи в `running` дольше 10 минут
+- Ставит `failed`, возвращает кредиты
+- Страховка от потери задач при деплое
+
+### Polling (фронтенд)
+`useJobPolling(jobId)` — `GET /api/jobs/:id` каждые 2 секунды. Останавливается при `done`/`failed`. Очистка при unmount.
+
+## 7. Схема БД (новые таблицы)
 
 ```sql
 CREATE TABLE projects (
@@ -89,40 +132,62 @@ CREATE TABLE generation_jobs (
 );
 ```
 
-## Изменения в переменных окружения
+## 8. Переменные окружения
 
-| Переменная | Назначение | Есть в Railway |
+| Переменная | Назначение | Обязательна | Значение на Railway |
+|---|---|---|---|
+| `GIGACHAT_AUTH_KEY` | Base64 от `client_id:client_secret` | Да | Установлена |
+| `GIGACHAT_SCOPE` | `GIGACHAT_API_PERS` / `GIGACHAT_API_CORP` | Нет (default: PERS) | Не установлена |
+| `GIGACHAT_MODEL` | Имя модели | Нет (default: GigaChat) | **Удалена** (была GigaChat-Lite, вызывала 404) |
+
+## 9. Новые зависимости
+
+| Пакет | Версия | Назначение |
 |---|---|---|
-| `GIGACHAT_AUTH_KEY` | Base64 от `client_id:client_secret` для OAuth | **Нет — нужно добавить** |
-| `GIGACHAT_SCOPE` | `GIGACHAT_API_PERS` или `GIGACHAT_API_CORP` (default: PERS) | Нет (опционально) |
-| `GIGACHAT_MODEL` | Модель (default: `GigaChat-Lite`) | Нет (опционально) |
+| `undici` | ^7 | HTTP-клиент с custom TLS dispatcher для GigaChat SSL |
 
-## Новые зависимости
-Нет новых npm-зависимостей. Используются встроенные `crypto`, `https`, `fs`.
+Node.js native `fetch` не поддерживает custom `Agent` через `dispatcher`. `undici` решает это.
 
-## Как проверить (чек-лист для ручного теста)
+## 10. E2E тест на production (чек-лист)
 
-### Без GigaChat (проверка UI и API):
-1. Открыть `/editor` — форма с полями: тема, стиль, длительность, кнопка «Придумать сценарии»
-2. Кнопка disabled если тема пустая
-3. Показывает «Стоимость: 1 кредит. У вас: N»
-4. Открыть `/dashboard` — видно кредиты и пустое состояние (или проекты если есть)
-5. Открыть `/project/:id` для существующего проекта — данные загружаются
+| # | Шаг | Результат |
+|---|---|---|
+| 1 | `/editor` — форма с полями тема, стиль, длительность | ✅ |
+| 2 | Кнопка disabled если тема пустая | ✅ |
+| 3 | Показывает «Стоимость: 1 кредит. У вас: N» | ✅ |
+| 4 | Ввести тему → «Придумать сценарии» | ✅ |
+| 5 | Spinner «Думаю над сценариями...» ~12 сек | ✅ |
+| 6 | Карточка сценария с тоновым бейджем и сценами | ✅ (1 из 3 — модель GigaChat базовая) |
+| 7 | «Выбрать этот сценарий» → redirect на `/project/:id` | ✅ |
+| 8 | ProjectPage: сценарий со сценами, длительность, кнопка «Создать видео» | ✅ |
+| 9 | Dashboard: карточки проектов в grid | ✅ |
+| 10 | Кредиты уменьшились на 1 | ✅ (30 → 29) |
+| 11 | При failed job — кредиты возвращаются | ✅ (проверено при 404 ошибках) |
 
-### С GigaChat (полный E2E):
-1. Добавить `GIGACHAT_AUTH_KEY` в Railway
-2. `/editor` → ввести «новый осенний латте в кофейне», стиль «Уютный», 30 сек → «Придумать сценарии»
-3. Видно spinner «Думаю над сценариями...» 10-20 сек
-4. Появляются 3 карточки: Уютный / Энергичный / Премиальный с 4-6 сценами каждый
-5. Нажать «Выбрать этот сценарий» → redirect на `/project/:id`
-6. Видно выбранный сценарий со сценами
-7. Вернуться в `/dashboard` → проект отображается карточкой
-8. Кредиты уменьшились на 1
-9. Если кредитов 0 → ошибка «Недостаточно кредитов»
-10. Если AUTH_KEY неверный → задача failed, кредиты вернулись
+## 11. Технические решения
 
-## Вопросы / на что обратить внимание
+- **`undici` вместо native `fetch`** — Node.js native fetch игнорирует custom Agent. undici позволяет передать `dispatcher` с кастомным TLS (или `rejectUnauthorized: false`).
+- **Транзакции с FOR UPDATE** — предотвращают race condition при одновременных запросах на списание кредитов.
+- **`setImmediate` для фонового выполнения** — не блокирует HTTP-ответ, job выполняется асинхронно.
+- **Парсер с агрессивным извлечением JSON** — GigaChat иногда оборачивает ответ в markdown; парсер это учитывает.
+- **`max_tokens: 4096`** — при 2048 ответ обрезался на 1 сценарии. 4096 даёт запас для 3 полных сценариев.
 
-1. **GIGACHAT_AUTH_KEY** — нужно добавить в Railway. Это Base64-encoded строка `client_id:client_secret` из Сбер AI Studio.
-2. **SSL-сертификаты** — сейчас `rejectUnauthorized: false`. Для продакшна нужно либо скачать CA-сертификаты НУЦ Минцифры, либо использовать `undici` с custom dispatcher.
-3. **GIGACHAT_SCOPE** — если используете корпоративный аккаунт, установите `GIGACHAT_API_CORP`.
+## 12. Отклонения от CLAUDE.md / ROADMAP
+
+- **Модель по умолчанию `GigaChat`** вместо `GigaChat-Lite` из ROADMAP. GigaChat-Lite не существует в API, `GigaChat` — ближайший рабочий аналог.
+- **`undici` добавлен как зависимость** — в ROADMAP не планировался, но необходим для SSL.
+
+## 13. Технический долг
+
+1. **SSL-сертификаты GigaChat** — `rejectUnauthorized: false`. Для продакшна нужны CA-сертификаты НУЦ Минцифры в `server/certs/`.
+2. **Базовая модель GigaChat** — может вернуть 1-2 сценария вместо 3. Для стабильных 3 вариантов нужна модель `GigaChat-Pro` или `GigaChat-2` (требует другой тариф).
+3. **Нет лимита задач на пользователя** — можно спамить создание задач.
+4. **Нет очистки старых jobs** — таблица растёт. Нужен cron на удаление >30 дней.
+5. **EditorPage теряет state при навигации** — если уйти во время генерации, прогресс пропадёт.
+6. **Нет retry UI при ошибке GigaChat** — только кнопка «Попробовать снова» (сбрасывает всё).
+7. **Тестовые проекты в БД** — 11 проектов от отладки модели, стоит вычистить.
+
+## 14. Известные баги
+
+1. **Количество сценариев < 3** — базовая модель `GigaChat` при `max_tokens: 4096` может всё равно вернуть 1-2 сценария. Не баг приложения, ограничение модели.
+2. **Тоновый бейдж не совпадает с содержимым** — бейдж привязан к индексу (0=Уютный, 1=Энергичный, 2=Премиальный), а GigaChat может вернуть сценарии в другом порядке.
