@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
-import https from 'https';
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
+import { Agent, fetch as undiciFetch } from 'undici';
 import { buildScenarioPrompt } from '../prompts/scenario.js';
 import { parseScenariosResponse } from '../lib/scenarioParser.js';
 
@@ -15,7 +15,7 @@ const REQUEST_TIMEOUT = 60000;
 let cachedToken = null;
 let cachedExpiresAt = 0;
 
-function createAgent() {
+function createDispatcher() {
   const rootCert = resolve('server/certs/russian_trusted_root_ca.cer');
   const subCert = resolve('server/certs/russian_trusted_sub_ca.cer');
 
@@ -24,22 +24,21 @@ function createAgent() {
   if (existsSync(subCert)) ca.push(readFileSync(subCert));
 
   if (ca.length > 0) {
-    return new https.Agent({ ca, rejectUnauthorized: true });
+    return new Agent({ connect: { ca, rejectUnauthorized: true } });
   }
 
   // TODO: add real Russian CA certs for production
   console.warn('⚠️ SSL verification disabled for GigaChat — fix before production');
-  return new https.Agent({ rejectUnauthorized: false });
+  return new Agent({ connect: { rejectUnauthorized: false } });
 }
 
-const agent = createAgent();
+const dispatcher = createDispatcher();
 
-async function fetchWithTimeout(url, options) {
+async function fetchGC(url, options) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
   try {
-    const res = await fetch(url, { ...options, signal: controller.signal, dispatcher: agent });
-    return res;
+    return await undiciFetch(url, { ...options, signal: controller.signal, dispatcher });
   } finally {
     clearTimeout(timer);
   }
@@ -55,7 +54,7 @@ async function getToken() {
 
   const scope = process.env.GIGACHAT_SCOPE || 'GIGACHAT_API_PERS';
 
-  const res = await fetchWithTimeout(OAUTH_URL, {
+  const res = await fetchGC(OAUTH_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -80,7 +79,7 @@ async function getToken() {
 async function chatCompletion(messages) {
   const token = await getToken();
 
-  const res = await fetchWithTimeout(CHAT_URL, {
+  const res = await fetchGC(CHAT_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
