@@ -2,10 +2,11 @@ import { randomUUID } from 'crypto';
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import { Agent, fetch as undiciFetch } from 'undici';
-import { buildScenarioPrompt } from '../prompts/scenario.js';
-import { parseScenariosResponse } from '../lib/scenarioParser.js';
+import { buildScenarioPrompt, TONES } from '../prompts/scenario.js';
+import { parseSingleScenario } from '../lib/scenarioParser.js';
 
-export const CREDITS_COST = 1;
+export const CREDITS_COST = 3;
+export const CREDITS_PER_SCENARIO = 1;
 
 const OAUTH_URL = 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth';
 const CHAT_URL = 'https://gigachat.devices.sberbank.ru/api/v1/chat/completions';
@@ -90,8 +91,8 @@ async function chatCompletion(messages) {
     body: JSON.stringify({
       model: MODEL,
       messages,
-      temperature: 0.87,
-      max_tokens: 4096,
+      temperature: 0.9,
+      max_tokens: 2048,
     }),
   });
 
@@ -124,25 +125,64 @@ function makeError(code, message) {
   return err;
 }
 
-export async function generateScenarios({ topic, style, duration }) {
-  const messages = buildScenarioPrompt({ topic, style, duration });
+async function generateOne({ topic, style, duration, tone }) {
+  const messages = buildScenarioPrompt({ topic, style, duration, tone });
   const rawText = await chatCompletion(messages);
-  const parsed = parseScenariosResponse(rawText);
+  const parsed = parseSingleScenario(rawText);
 
   if (!parsed.ok) {
-    console.error('LLM raw response (first 500 chars):', rawText.substring(0, 500));
-    throw makeError('PARSE_ERROR', `Failed to parse LLM response: ${rawText.substring(0, 200)}`);
+    console.error(`LLM parse fail [${tone.key}]:`, rawText.substring(0, 300));
+    throw makeError('PARSE_ERROR', `Failed to parse ${tone.label} scenario`);
+  }
+
+  // Ensure tone label is set from context if model didn't return it
+  if (!parsed.scenario.tone) {
+    parsed.scenario.tone = tone.label;
+  }
+
+  return parsed.scenario;
+}
+
+export async function generateScenarios({ topic, style, duration }) {
+  const results = await Promise.allSettled(
+    TONES.map(tone => generateOne({ topic, style, duration, tone }))
+  );
+
+  const scenarios = [];
+  let failed = 0;
+
+  for (let i = 0; i < results.length; i++) {
+    if (results[i].status === 'fulfilled') {
+      scenarios.push(results[i].value);
+    } else {
+      failed++;
+      console.warn(`Scenario [${TONES[i].key}] failed:`, results[i].reason?.message);
+    }
+  }
+
+  const succeeded = scenarios.length;
+
+  if (succeeded === 0) {
+    const firstError = results.find(r => r.status === 'rejected')?.reason;
+    throw makeError(
+      firstError?.code || 'PROVIDER_ERROR',
+      `All 3 scenarios failed. Last: ${firstError?.message || 'unknown'}`
+    );
+  }
+
+  if (succeeded < 3) {
+    console.warn(`Partial success: ${succeeded}/3 scenarios generated`);
   }
 
   return {
     ok: true,
-    data: { scenarios: parsed.scenarios },
-    credits_used: CREDITS_COST,
+    data: { scenarios, succeeded, failed },
+    succeeded,
+    failed,
   };
 }
 
 export async function generateIdeas({ niche, count = 5 }) {
-  // Stub — будет реализовано в будущих спринтах
   throw makeError('PROVIDER_ERROR', 'generateIdeas not implemented yet');
 }
 

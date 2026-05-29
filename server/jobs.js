@@ -1,5 +1,5 @@
 import pool from './db.js';
-import { generateScenarios, CREDITS_COST } from './providers/llm.js';
+import { generateScenarios, CREDITS_COST, CREDITS_PER_SCENARIO } from './providers/llm.js';
 
 export async function createJob({ userId, projectId, type, input, costCredits }) {
   const client = await pool.connect();
@@ -87,9 +87,18 @@ async function runJob(jobId) {
       }
     }
 
+    // Partial refund: return credits for failed scenarios
+    if (result.succeeded !== undefined && result.succeeded < 3) {
+      const refund = (3 - result.succeeded) * CREDITS_PER_SCENARIO;
+      if (refund > 0) {
+        await pool.query('UPDATE users SET credits = credits + $1 WHERE id = $2', [refund, user_id]);
+        console.log(`Partial refund: ${refund} credits returned to user ${user_id} (${result.succeeded}/3 scenarios)`);
+      }
+    }
+
     await pool.query(
       `UPDATE generation_jobs SET status = 'done', progress = 100, output = $1, updated_at = NOW() WHERE id = $2`,
-      [JSON.stringify(result), jobId]
+      [JSON.stringify(result.data || result), jobId]
     );
   } catch (err) {
     console.error(`Job ${jobId} unhandled error:`, err);
@@ -109,8 +118,7 @@ async function runJob(jobId) {
 
 async function executeType(type, input) {
   if (type === 'script') {
-    const res = await generateScenarios(input);
-    return res.data;
+    return await generateScenarios(input);
   }
   throw Object.assign(new Error(`Type '${type}' not implemented`), { retryable: false });
 }

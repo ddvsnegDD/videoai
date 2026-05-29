@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Clock, Palette, RefreshCw, ArrowLeft, Check } from 'lucide-react';
+import { Sparkles, Clock, Palette, RefreshCw, ArrowLeft, Check, Info } from 'lucide-react';
 import { C } from '../lib/theme.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.jsx';
@@ -14,6 +14,14 @@ const DURATIONS = [
   { label: '30 сек', value: 30 },
   { label: '60 сек', value: 60 },
 ];
+
+const COST = 3;
+
+const TONE_COLORS = {
+  'Уютный': '#F59E0B',
+  'Энергичный': '#EF4444',
+  'Премиальный': '#8B5CF6',
+};
 
 export default function EditorPage() {
   const { user, refresh } = useAuth();
@@ -55,7 +63,7 @@ export default function EditorPage() {
       refresh();
     } catch (err) {
       if (err.data?.error === 'INSUFFICIENT_CREDITS') {
-        setError('Недостаточно кредитов. Пополните баланс.');
+        setError('Недостаточно кредитов. Нужно 3 кредита для генерации.');
       } else {
         setError('Ошибка при создании задачи');
       }
@@ -79,6 +87,10 @@ export default function EditorPage() {
     setError('');
     refresh();
   }
+
+  const scenarios = job?.output?.scenarios;
+  const succeeded = job?.output?.succeeded;
+  const showPartialInfo = job?.status === 'done' && succeeded !== undefined && succeeded < 3;
 
   return (
     <div style={{ paddingTop: 96, paddingBottom: 80, minHeight: '100vh', background: C.bg }}>
@@ -104,7 +116,7 @@ export default function EditorPage() {
               Новое видео
             </h1>
             <p style={{ color: C.gray500, fontSize: '0.9375rem', marginBottom: 32 }}>
-              Опишите тему — AI придумает 3 варианта сценария
+              Опишите тему — AI придумает 3 варианта сценария в разных тонах
             </p>
 
             <form onSubmit={handleGenerate}>
@@ -150,9 +162,9 @@ export default function EditorPage() {
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
                 <p style={{ color: C.gray400, fontSize: '0.8125rem' }}>
-                  Стоимость: <strong style={{ color: C.primary }}>1 кредит</strong>. У вас: <strong>{credits}</strong>
+                  Стоимость: <strong style={{ color: C.primary }}>{COST} кредита</strong> (3 варианта). У вас: <strong>{credits}</strong>
                 </p>
-                <Btn variant="primary" size="lg" disabled={loading || !topic.trim() || credits < 1}>
+                <Btn variant="primary" size="lg" disabled={loading || !topic.trim() || credits < COST}>
                   {loading ? (
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
@@ -198,17 +210,28 @@ export default function EditorPage() {
               </div>
             )}
 
-            {job?.status === 'done' && job.output?.scenarios && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                {job.output.scenarios.map((scenario, i) => (
-                  <ScenarioCard
-                    key={i}
-                    scenario={scenario}
-                    index={i}
-                    onSelect={() => handleSelectScenario(scenario)}
-                  />
-                ))}
-              </div>
+            {job?.status === 'done' && scenarios && (
+              <>
+                {showPartialInfo && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px',
+                    background: '#FEF3C7', borderRadius: 12, marginBottom: 20,
+                    fontSize: '0.8125rem', color: '#92400E',
+                  }}>
+                    <Info size={16} />
+                    Получилось {succeeded} из 3 вариантов, кредиты за остальные возвращены.
+                  </div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  {scenarios.map((scenario, i) => (
+                    <ScenarioCard
+                      key={i}
+                      scenario={scenario}
+                      onSelect={() => handleSelectScenario(scenario)}
+                    />
+                  ))}
+                </div>
+              </>
             )}
 
             {job?.status === 'failed' && (
@@ -230,11 +253,10 @@ export default function EditorPage() {
   );
 }
 
-const TONE_LABELS = ['Уютный', 'Энергичный', 'Премиальный'];
-const TONE_COLORS = ['#F59E0B', '#EF4444', '#8B5CF6'];
-
-function ScenarioCard({ scenario, index, onSelect }) {
+function ScenarioCard({ scenario, onSelect }) {
   const totalSec = scenario.scenes.reduce((s, sc) => s + sc.duration_sec, 0);
+  const tone = scenario.tone;
+  const toneColor = TONE_COLORS[tone] || C.gray500;
 
   return (
     <div style={{
@@ -245,13 +267,15 @@ function ScenarioCard({ scenario, index, onSelect }) {
       transition: 'box-shadow 0.2s, border-color 0.2s',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <span style={{
-          fontSize: '0.6875rem', fontWeight: 600, padding: '3px 10px', borderRadius: 6,
-          background: TONE_COLORS[index] + '18', color: TONE_COLORS[index],
-          textTransform: 'uppercase', letterSpacing: '0.05em',
-        }}>
-          {TONE_LABELS[index] || `Вариант ${index + 1}`}
-        </span>
+        {tone && (
+          <span style={{
+            fontSize: '0.6875rem', fontWeight: 600, padding: '3px 10px', borderRadius: 6,
+            background: toneColor + '18', color: toneColor,
+            textTransform: 'uppercase', letterSpacing: '0.05em',
+          }}>
+            {tone}
+          </span>
+        )}
         <span style={{ color: C.gray400, fontSize: '0.75rem' }}>{totalSec} сек</span>
       </div>
 
