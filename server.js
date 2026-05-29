@@ -232,6 +232,17 @@ app.get('/api/debug/models', requireAuth, async (req, res) => {
   }
 });
 
+// ── Debug: test chat completion with multiple models + scopes (temporary) ──
+app.get('/api/debug/test-chat', requireAuth, async (req, res) => {
+  try {
+    const { testChat } = await import('./server/providers/llm.js');
+    const results = await testChat();
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Static + SPA fallback (ALWAYS LAST) ──
 app.use(express.static(DIST));
 app.get('/{*splat}', (req, res) => {
