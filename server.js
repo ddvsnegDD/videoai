@@ -222,6 +222,17 @@ app.get('/api/jobs', requireAuth, async (req, res) => {
   }
 });
 
+// ── TEMP: cleanup test data (remove after use) ──
+app.post('/api/admin/cleanup-test-data', requireAuth, async (req, res) => {
+  try {
+    const jobs = await pool.query('DELETE FROM generation_jobs WHERE user_id = $1 RETURNING id', [req.userId]);
+    const projects = await pool.query('DELETE FROM projects WHERE user_id = $1 RETURNING id', [req.userId]);
+    res.json({ deletedJobs: jobs.rowCount, deletedProjects: projects.rowCount });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Static + SPA fallback (ALWAYS LAST) ──
 app.use(express.static(DIST));
 app.get('/{*splat}', (req, res) => {
