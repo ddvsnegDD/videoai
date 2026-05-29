@@ -30,11 +30,14 @@ crm_provider: ""
 admin_panel: true              # Нужна — модерация, статистика, управление кредитами
 
 # Инфраструктура
-github_repo: ""                # Заполнить после создания репо
+github_repo: "https://github.com/ddvsnegDD/videoai"
 github_remote: "origin"
+domain: "ddvideoai.ru"         # Активен, HTTPS, DNS через Cloudflare
 hosting: "railway"             # Старт на Railway, миграция на Selectel/Yandex на B2B-этапе
-email_provider: "brevo"
-email_from: ""                 # Заполнить после верификации домена в Brevo
+db: "Postgres-DDvideoai"       # Отдельная база Railway (НЕ общая с другими проектами!)
+email_provider: "brevo"        # Домен ddvideoai.ru authenticated (SPF/DKIM/DMARC)
+email_from: "noreply@ddvideoai.ru"
+mail_hosting: "VK WorkSpace (Mail.ru)"  # Входящая почта на домене
 ```
 
 ---
@@ -42,6 +45,16 @@ email_from: ""                 # Заполнить после верифика�
 ## Роль
 
 Ты — опытный fullstack-разработчик и UI/UX-дизайнер. Создаёшь стильные, производительные, технически сложные веб-приложения уровня продакшн. Пишешь чистый, поддерживаемый код без лишних абстракций. Общаешься на русском.
+
+---
+
+## Статус спринтов (актуально)
+
+- **Спринт 0 — ЗАВЕРШЁН.** Лендинг на Railway, домен ddvideoai.ru с HTTPS, базовая структура.
+- **Спринт 1 — ЗАВЕРШЁН.** Авторизация email OTP (Brevo), JWT в httpOnly cookie, кабинет, 30 приветственных кредитов. Таблицы `users`, `auth_codes` (с `attempts` для brute-force защиты). Безопасность: crypto.randomInt для OTP, обязательный JWT_SECRET (без fallback), лимит 5 попыток, rate limit 60 сек, очистка протухших кодов.
+- **Спринт 2 — В РАБОТЕ.** GigaChat (LLM), генерация сценариев, движок задач (jobs + polling), таблицы `projects` и `generation_jobs`, EditorPage.
+
+> При работе над новым спринтом не ломай и не переписывай код завершённых спринтов без явного указания.
 
 ## Принципы работы
 
@@ -72,8 +85,8 @@ email_from: ""                 # Заполнить после верифика�
 
 ### Frontend
 ```
-React 18 + Vite 5
-React Router DOM 6
+React 19 + Vite 8
+React Router DOM 7
 Lucide React (иконки)
 global.css + inline styles через C из theme.js
 Google Fonts: Manrope + Inter
@@ -83,7 +96,7 @@ Google Fonts: Manrope + Inter
 ```
 Express 5 (ESM)
 PostgreSQL — пользователи, проекты, задачи генерации, подписки
-JWT в httpOnly cookie
+JWT в httpOnly cookie (jsonwebtoken + cookie-parser)
 Brevo — email
 ЮKassa — платежи
 Yandex Object Storage (S3-совместимое) — хранение видео
@@ -129,7 +142,7 @@ videoai/
 │   ├── jobs.js                 # Очередь задач генерации (через PostgreSQL)
 │   ├── payments.js             # ЮKassa
 │   └── providers/
-│       ├── llm.js              # GigaChat: scenarios, ideas
+│       ├── llm.js              # GigaChat: scenarios, ideas (OAuth токен на 30 мин, кешировать)
 │       ├── video.js            # Kandinsky Video
 │       ├── image.js            # GigaChat Image
 │       ├── tts.js              # Yandex SpeechKit
@@ -298,6 +311,7 @@ CREATE TABLE auth_codes (
   code VARCHAR(6) NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
   used BOOLEAN DEFAULT FALSE,
+  attempts INTEGER DEFAULT 0,        -- brute-force защита: блок после 5 попыток
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -439,9 +453,11 @@ EMAIL_FROM
 ADMIN_PASSWORD
 
 # AI-провайдеры
-GIGACHAT_CLIENT_ID
-GIGACHAT_CLIENT_SECRET
-GIGACHAT_SCOPE            # GIGACHAT_API_PERS / CORP
+GIGACHAT_AUTH_KEY        # Authorization Key из Сбер AI Studio (base64 client_id:secret)
+GIGACHAT_SCOPE           # GIGACHAT_API_PERS (физлица) / GIGACHAT_API_CORP (юрлица)
+# ВАЖНО: GigaChat использует самоподписанный сертификат НУЦ Минцифры.
+# На Railway возможна ошибка SSL — подгружать цепочку Минцифры в https.Agent
+# (rejectUnauthorized: false как временный fallback, но лучше подложить russian_trusted_root_ca).
 
 YANDEX_SPEECHKIT_KEY
 YANDEX_FOLDER_ID
@@ -480,3 +496,5 @@ NODE_ENV=production
 - Не храни видео локально — всегда S3
 - Не вызывай AI-провайдеры с фронта — только через бэк
 - Не хардкодь промпты в коде — все промпты для LLM в `server/prompts/`
+- Не переписывай код завершённых спринтов (см. «Статус спринтов») без явного указания
+- Не используй общую БД с другими проектами — только Postgres-DDvideoai

@@ -28,6 +28,32 @@ export async function initDB() {
     );
 
     ALTER TABLE auth_codes ADD COLUMN IF NOT EXISTS attempts INTEGER DEFAULT 0;
+
+    CREATE TABLE IF NOT EXISTS projects (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      title VARCHAR(255) NOT NULL,
+      template_id VARCHAR(50),
+      brief JSONB NOT NULL,
+      result_url TEXT,
+      status VARCHAR(20) DEFAULT 'draft',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS generation_jobs (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+      type VARCHAR(50) NOT NULL,
+      status VARCHAR(20) DEFAULT 'pending',
+      progress INTEGER DEFAULT 0,
+      input JSONB NOT NULL,
+      output JSONB,
+      error TEXT,
+      cost_credits INTEGER DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
   `);
   console.log('DB tables ready');
 }
