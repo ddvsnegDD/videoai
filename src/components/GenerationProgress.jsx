@@ -60,7 +60,7 @@ export default function GenerationProgress({ job }) {
         </div>
       )}
       <p style={{ color: C.gray400, fontSize: '0.8125rem', marginTop: 8 }}>
-        Придумываю 3 варианта... обычно 15-20 секунд
+        Придумываю 3 варианта... обычно 30-40 секунд
       </p>
     </div>
   );

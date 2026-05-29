@@ -144,34 +144,24 @@ async function generateOne({ topic, style, duration, tone }) {
 }
 
 export async function generateScenarios({ topic, style, duration }) {
-  // Stagger requests by 1.5s to avoid GigaChat PERS rate limits
-  const results = await Promise.allSettled(
-    TONES.map((tone, i) =>
-      new Promise(resolve => setTimeout(resolve, i * 1500))
-        .then(() => generateOne({ topic, style, duration, tone }))
-    )
-  );
-
+  // Sequential requests — GigaChat PERS rate-limits parallel calls
   const scenarios = [];
   let failed = 0;
 
-  for (let i = 0; i < results.length; i++) {
-    if (results[i].status === 'fulfilled') {
-      scenarios.push(results[i].value);
-    } else {
+  for (const tone of TONES) {
+    try {
+      const scenario = await generateOne({ topic, style, duration, tone });
+      scenarios.push(scenario);
+    } catch (err) {
       failed++;
-      console.warn(`Scenario [${TONES[i].key}] failed:`, results[i].reason?.message);
+      console.warn(`Scenario [${tone.key}] failed:`, err.message);
     }
   }
 
   const succeeded = scenarios.length;
 
   if (succeeded === 0) {
-    const firstError = results.find(r => r.status === 'rejected')?.reason;
-    throw makeError(
-      firstError?.code || 'PROVIDER_ERROR',
-      `All 3 scenarios failed. Last: ${firstError?.message || 'unknown'}`
-    );
+    throw makeError('PROVIDER_ERROR', 'All 3 scenarios failed');
   }
 
   if (succeeded < 3) {
