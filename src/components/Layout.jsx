@@ -139,7 +139,7 @@ function Header({ isLanding, menuOpen, setMenuOpen }) {
                 <Shield size={12} /> Админка
               </Link>
             )}
-            <CreditsBadge credits={user.credits} />
+            <CreditsBadge credits={user.credits} free={user.free_wan + user.free_veo} />
             <span style={{
               color: C.gray500,
               fontSize: '0.8125rem',
@@ -202,7 +202,7 @@ function Header({ isLanding, menuOpen, setMenuOpen }) {
   );
 }
 
-function CreditsBadge({ credits }) {
+function CreditsBadge({ credits, free = 0 }) {
   return (
     <div style={{
       display: 'flex',
@@ -216,7 +216,10 @@ function CreditsBadge({ credits }) {
       color: C.primaryDark,
     }}>
       <Sparkles size={14} />
-      {credits}
+      {credits} кр.
+      {free > 0 && (
+        <span style={{ fontSize: '0.625rem', opacity: 0.7 }}>+{free} free</span>
+      )}
     </div>
   );
 }

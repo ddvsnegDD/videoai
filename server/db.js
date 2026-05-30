@@ -29,6 +29,9 @@ export async function initDB() {
 
     ALTER TABLE auth_codes ADD COLUMN IF NOT EXISTS attempts INTEGER DEFAULT 0;
 
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS free_wan INTEGER DEFAULT 1;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS free_veo INTEGER DEFAULT 1;
+
     CREATE TABLE IF NOT EXISTS projects (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,

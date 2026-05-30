@@ -1,7 +1,7 @@
 import { Check, AlertCircle, Loader2 } from 'lucide-react';
 import { C } from '../lib/theme.js';
 
-export default function GenerationProgress({ job, type = 'script' }) {
+export default function GenerationProgress({ job }) {
   if (!job) return null;
 
   if (job.status === 'done') {
@@ -27,63 +27,43 @@ export default function GenerationProgress({ job, type = 'script' }) {
     );
   }
 
-  const isStoryboard = type === 'storyboard';
   const progress = job.progress || 0;
 
   return (
     <div style={wrapStyle}>
       <Loader2
-        size={32}
-        color={C.primary}
+        size={32} color={C.primary}
         style={{ animation: 'spin 0.7s linear infinite', marginBottom: 16 }}
       />
       <p style={{ color: C.dark, fontWeight: 600, fontSize: '0.9375rem', marginBottom: 4 }}>
-        {job.status === 'pending' ? 'В очереди...' : isStoryboard ? 'Рисую и озвучиваю сцены...' : 'Генерация...'}
+        {job.status === 'pending' ? 'В очереди...' : 'Оживляю товар...'}
       </p>
-      {(progress > 0 || isStoryboard) && (
-        <div style={{ width: '100%', maxWidth: 280 }}>
+      <div style={{ width: '100%', maxWidth: 280 }}>
+        <div style={{ height: 6, borderRadius: 3, background: C.gray100, overflow: 'hidden' }}>
           <div style={{
-            height: 6,
+            height: '100%',
+            width: `${Math.max(progress, job.status === 'running' ? 5 : 0)}%`,
             borderRadius: 3,
-            background: C.gray100,
-            overflow: 'hidden',
-          }}>
-            <div style={{
-              height: '100%',
-              width: `${Math.max(progress, isStoryboard && job.status === 'running' ? 5 : 0)}%`,
-              borderRadius: 3,
-              background: `linear-gradient(90deg, ${C.primary}, ${C.primaryDark})`,
-              transition: 'width 0.5s ease',
-            }} />
-          </div>
-          <p style={{ color: C.gray400, fontSize: '0.75rem', textAlign: 'center', marginTop: 6 }}>
-            {progress}%
-          </p>
+            background: `linear-gradient(90deg, ${C.primary}, ${C.primaryDark})`,
+            transition: 'width 0.5s ease',
+          }} />
         </div>
-      )}
+        <p style={{ color: C.gray400, fontSize: '0.75rem', textAlign: 'center', marginTop: 6 }}>{progress}%</p>
+      </div>
       <p style={{ color: C.gray400, fontSize: '0.8125rem', marginTop: 8 }}>
-        {isStoryboard
-          ? 'Генерация картинок и озвучки... обычно 1-3 минуты'
-          : 'Придумываю 3 варианта... обычно 15-20 секунд'}
+        Генерация видео... обычно 1-3 минуты
       </p>
     </div>
   );
 }
 
 const wrapStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  padding: '48px 24px',
-  textAlign: 'center',
+  display: 'flex', flexDirection: 'column', alignItems: 'center',
+  padding: '48px 24px', textAlign: 'center',
 };
 
 const iconWrap = {
-  width: 56,
-  height: 56,
-  borderRadius: 16,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
+  width: 56, height: 56, borderRadius: 16,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
   marginBottom: 16,
 };

@@ -137,6 +137,8 @@ function sanitizeUser(row) {
     name: row.name,
     role: row.role,
     credits: row.credits,
+    free_wan: row.free_wan ?? 0,
+    free_veo: row.free_veo ?? 0,
     created_at: row.created_at,
   };
 }

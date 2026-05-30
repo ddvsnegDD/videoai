@@ -38,7 +38,7 @@ export default function DashboardPage() {
           </div>
           <Link to="/editor">
             <Btn variant="primary" size="md">
-              <Plus size={18} /> Новый проект
+              <Plus size={18} /> Новый креатив
             </Btn>
           </Link>
         </div>
@@ -88,11 +88,11 @@ export default function DashboardPage() {
               color: C.gray500, fontSize: '0.9375rem', maxWidth: 400,
               margin: '0 auto 24px', lineHeight: 1.6,
             }}>
-              Опишите тему видео, и AI сгенерирует сценарий, визуал и озвучку за пару минут
+              Загрузите фото товара — AI оживит его в рекламный видеокреатив за пару минут
             </p>
             <Link to="/editor">
               <Btn variant="primary" size="lg">
-                <Plus size={18} /> Создать видео
+                <Plus size={18} /> Создать креатив
               </Btn>
             </Link>
           </div>
