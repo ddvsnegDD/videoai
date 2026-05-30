@@ -7,13 +7,13 @@ const CREDITS_VEO = Number(process.env.CREDITS_VEO) || 90;
 
 export const VIDEO_MODELS = {
   wan: {
-    id: 'fal-ai/wan/v2.1/image-to-video',
+    id: 'fal-ai/wan/v2.7/image-to-video',
     label: 'Эконом (Wan)',
     label_full: 'Быстрый, доступный — для массовых креативов',
     credits: CREDITS_WAN,
   },
   veo: {
-    id: 'fal-ai/veo3/image-to-video',
+    id: 'fal-ai/veo3.1/image-to-video',
     label: 'Премиум (Veo)',
     label_full: 'Кинематографичное качество',
     credits: CREDITS_VEO,
