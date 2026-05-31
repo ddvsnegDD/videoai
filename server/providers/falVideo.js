@@ -13,7 +13,7 @@ export const VIDEO_MODELS = {
     credits: CREDITS_WAN,
   },
   veo: {
-    id: 'fal-ai/veo3.1/image-to-video',
+    id: 'fal-ai/veo3.1/fast/image-to-video',
     label: 'Премиум (Veo)',
     label_full: 'Кинематографичное качество',
     credits: CREDITS_VEO,
