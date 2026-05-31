@@ -413,7 +413,13 @@ export async function runReconciler() {
         }
         // IN_QUEUE / IN_PROGRESS — just wait, last_polled_at is updated
       } catch (err) {
-        console.error(`[Reconciler] Error processing job ${row.id}:`, err.message);
+        const msg = err.message || String(err);
+        console.error(`[Reconciler] Error processing job ${row.id}:`, msg);
+        // 404 / "Not Found" = request_id doesn't exist at fal, not transient
+        if (msg.includes('Not Found') || msg.includes('404')) {
+          await failJob(row.id, row.user_id, row.cost_credits, `fal request not found: ${msg}`, true);
+          console.log(`[Reconciler] Job ${row.id}: marked failed (request not found)`);
+        }
       }
     }
   } catch (err) {
