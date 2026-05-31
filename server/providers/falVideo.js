@@ -96,6 +96,8 @@ export async function animateImage({ imageUrl, modelKey, motionPrompt, projectId
       await new Promise(r => setTimeout(r, POLL_INTERVAL));
 
       const status = await fal.queue.status(model.id, { requestId: request_id, logs: false });
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      console.log(`[fal] Poll ${elapsed}s: status=${status.status}`);
 
       if (status.status === 'IN_PROGRESS' && !progressSent50) {
         if (onProgress) await onProgress(50);
