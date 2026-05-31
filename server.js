@@ -194,8 +194,13 @@ app.post('/api/jobs', requireAuth, async (req, res) => {
     if (project.rows.length === 0) return res.status(404).json({ error: 'project_not_found' });
 
     if (type === 'animate') {
-      if (!input.imageUrl || !input.modelKey || !input.motionPrompt) {
+      if (!input.imageUrl || !input.modelKey) {
         return res.status(400).json({ error: 'missing_animate_fields' });
+      }
+      // Resolve motion prompt: custom text > preset lookup > default
+      if (!input.motionPrompt) {
+        const preset = MOTION_PRESETS.find(p => p.key === input.motionKey);
+        input.motionPrompt = preset?.prompt || MOTION_PRESETS[0].prompt;
       }
       const model = VIDEO_MODELS[input.modelKey];
       if (!model) return res.status(400).json({ error: 'invalid_model' });
