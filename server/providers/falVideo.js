@@ -55,10 +55,33 @@ export async function animateImage({ imageUrl, modelKey, motionPrompt, projectId
   console.log(`[fal] Image: ${imageUrl}`);
 
   try {
-    const submitInput = {
-      image_url: imageUrl,
-      prompt: motionPrompt || MOTION_PRESETS[0].prompt,
-    };
+    const promptText = motionPrompt || MOTION_PRESETS[0].prompt;
+
+    // Model-specific parameters (field names differ between Wan and Veo!)
+    let submitInput;
+    if (modelKey === 'wan') {
+      submitInput = {
+        image_url: imageUrl,
+        prompt: promptText,
+        resolution: '720p',           // WanEnum: "720p" | "1080p"
+        duration: '5',                 // WanEnum: "2"-"15" (string number, no suffix)
+        negative_prompt: 'low quality, distortion, warping, blurry, text overlay',
+        enable_prompt_expansion: false, // keep our prompt as-is
+      };
+    } else {
+      // Veo 3.1 fast
+      submitInput = {
+        image_url: imageUrl,
+        prompt: promptText,
+        resolution: '720p',           // VeoEnum: "720p" | "1080p" | "4k"
+        duration: '8s',               // VeoEnum: "4s" | "6s" | "8s" (string with suffix)
+        generate_audio: false,         // CRITICAL: audio doubles the cost
+        aspect_ratio: '9:16',         // VeoEnum: "auto" | "16:9" | "9:16"
+        negative_prompt: 'low quality, distortion, warping, blurry',
+      };
+    }
+
+    console.log(`[fal] Final input:`, JSON.stringify(submitInput));
 
     // Submit to queue
     const { request_id } = await fal.queue.submit(model.id, { input: submitInput });
