@@ -88,9 +88,9 @@ export async function animateImage({ imageUrl, modelKey, motionPrompt, projectId
     console.log(`[fal] Submitted, request_id: ${request_id}`);
     if (onProgress) await onProgress(20);
 
-    // Poll until complete
+    // Poll until complete — send graduated progress to keep updated_at fresh (prevents watchdog kill)
     const startTime = Date.now();
-    let progressSent50 = false;
+    let lastProgressPct = 20;
 
     while (Date.now() - startTime < OPERATION_TIMEOUT) {
       await new Promise(r => setTimeout(r, POLL_INTERVAL));
@@ -99,9 +99,13 @@ export async function animateImage({ imageUrl, modelKey, motionPrompt, projectId
       const elapsed = Math.round((Date.now() - startTime) / 1000);
       console.log(`[fal] Poll ${elapsed}s: status=${status.status}`);
 
-      if (status.status === 'IN_PROGRESS' && !progressSent50) {
-        if (onProgress) await onProgress(50);
-        progressSent50 = true;
+      // Graduated progress: 20→65 during polling (keeps updated_at fresh for watchdog)
+      if (onProgress && (status.status === 'IN_QUEUE' || status.status === 'IN_PROGRESS')) {
+        const newPct = Math.min(20 + Math.round((elapsed / (OPERATION_TIMEOUT / 1000)) * 45), 65);
+        if (newPct > lastProgressPct) {
+          await onProgress(newPct);
+          lastProgressPct = newPct;
+        }
       }
 
       if (status.status === 'COMPLETED') {

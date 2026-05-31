@@ -1,7 +1,7 @@
 import pool from './db.js';
 import { animateImage } from './providers/falVideo.js';
 
-const WATCHDOG_TIMEOUT_MIN = 10;
+const WATCHDOG_TIMEOUT_MIN = 20; // Must be > OPERATION_TIMEOUT (8 min) + retry (8 min)
 
 export async function createJob({ userId, projectId, type, input, costCredits, freeColumn = null }) {
   const client = await pool.connect();
