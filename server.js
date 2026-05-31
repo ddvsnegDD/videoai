@@ -4,7 +4,7 @@ import multer from 'multer';
 import { resolve, join } from 'path';
 import pool, { initDB } from './server/db.js';
 import { sendCode, verifyCode, requireAuth, getMe } from './server/auth.js';
-import { createJob, getJob, listJobs, runWatchdog } from './server/jobs.js';
+import { createJob, getJob, listJobs, runWatchdog, startReconciler } from './server/jobs.js';
 import { VIDEO_MODELS, MOTION_PRESETS } from './server/providers/falVideo.js';
 import { uploadBuffer } from './server/storage.js';
 
@@ -225,6 +225,7 @@ app.post('/api/jobs', requireAuth, async (req, res) => {
   } catch (err) {
     if (err.message === 'INSUFFICIENT_CREDITS') return res.status(402).json({ error: 'INSUFFICIENT_CREDITS' });
     if (err.message === 'NO_FREE_TRY') return res.status(402).json({ error: 'INSUFFICIENT_CREDITS' });
+    if (err.message === 'TOO_MANY_ACTIVE_JOBS') return res.status(429).json({ error: 'TOO_MANY_ACTIVE_JOBS' });
     console.error('create job error:', err);
     res.status(500).json({ error: 'server_error' });
   }
@@ -345,6 +346,7 @@ async function start() {
   }
 
   setInterval(runWatchdog, 60000);
+  startReconciler();
   app.listen(PORT, () => console.log(`VideoAI server on port ${PORT}`));
 }
 

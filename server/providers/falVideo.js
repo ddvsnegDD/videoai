@@ -1,7 +1,6 @@
 import { fal } from '@fal-ai/client';
 import { uploadBuffer } from '../storage.js';
 
-// Credits read from env (set in Railway)
 const CREDITS_WAN = Number(process.env.CREDITS_WAN) || 40;
 const CREDITS_VEO = Number(process.env.CREDITS_VEO) || 90;
 
@@ -27,13 +26,13 @@ export const MOTION_PRESETS = [
   { key: 'float', label: 'Парение', prompt: 'product gently floating with subtle movement, soft light, premium commercial product video' },
 ];
 
-const OPERATION_TIMEOUT = 8 * 60 * 1000; // 8 min (Wan can take 2-5 min + queue)
+export const POLL_TIMEOUT = 8 * 60 * 1000; // 8 min
 const POLL_INTERVAL = 5000;
 
 function makeError(code, message) {
   const err = new Error(message);
   err.code = code;
-  err.retryable = code !== 'AUTH_ERROR' && code !== 'INVALID_INPUT';
+  err.retryable = false; // never retry fal submits — costs money
   return err;
 }
 
@@ -43,120 +42,121 @@ function ensureConfig() {
   fal.config({ credentials: key });
 }
 
-export async function animateImage({ imageUrl, modelKey, motionPrompt, projectId, onProgress }) {
+/**
+ * Submit to fal queue. Returns { request_id }.
+ * Does NOT poll — caller saves request_id to DB first.
+ */
+export async function submitToFal({ imageUrl, modelKey, motionPrompt, seed }) {
   ensureConfig();
-
   const model = VIDEO_MODELS[modelKey];
   if (!model) throw makeError('INVALID_INPUT', `Unknown model: ${modelKey}`);
 
-  console.log(`[fal] Starting ${modelKey} for project ${projectId}`);
-  console.log(`[fal] Model: ${model.id}`);
-  console.log(`[fal] Prompt: ${motionPrompt?.slice(0, 100)}`);
-  console.log(`[fal] Image: ${imageUrl}`);
+  const promptText = motionPrompt || MOTION_PRESETS[0].prompt;
+
+  let submitInput;
+  if (modelKey === 'wan') {
+    submitInput = {
+      image_url: imageUrl,
+      prompt: promptText,
+      seed,
+      resolution: '720p',
+      duration: 5,
+      negative_prompt: 'low quality, distortion, warping, blurry, text overlay',
+      enable_prompt_expansion: false,
+    };
+  } else {
+    submitInput = {
+      image_url: imageUrl,
+      prompt: promptText,
+      seed,
+      resolution: '720p',
+      duration: '8s',
+      generate_audio: false,
+      aspect_ratio: '9:16',
+      negative_prompt: 'low quality, distortion, warping, blurry',
+    };
+  }
+
+  console.log(`[fal] Submitting ${modelKey}, seed=${seed}`);
+  console.log(`[fal] Input:`, JSON.stringify(submitInput));
 
   try {
-    const promptText = motionPrompt || MOTION_PRESETS[0].prompt;
-
-    // Model-specific parameters (field names differ between Wan and Veo!)
-    let submitInput;
-    if (modelKey === 'wan') {
-      submitInput = {
-        image_url: imageUrl,
-        prompt: promptText,
-        resolution: '720p',           // WanEnum: "720p" | "1080p"
-        duration: 5,                   // WanEnum: NUMBER 2-15 (not a string!)
-        negative_prompt: 'low quality, distortion, warping, blurry, text overlay',
-        enable_prompt_expansion: false, // keep our prompt as-is
-      };
-    } else {
-      // Veo 3.1 fast
-      submitInput = {
-        image_url: imageUrl,
-        prompt: promptText,
-        resolution: '720p',           // VeoEnum: "720p" | "1080p" | "4k"
-        duration: '8s',               // VeoEnum: "4s" | "6s" | "8s" (string with suffix)
-        generate_audio: false,         // CRITICAL: audio doubles the cost
-        aspect_ratio: '9:16',         // VeoEnum: "auto" | "16:9" | "9:16"
-        negative_prompt: 'low quality, distortion, warping, blurry',
-      };
-    }
-
-    console.log(`[fal] Final input:`, JSON.stringify(submitInput));
-
-    // Submit to queue
     const { request_id } = await fal.queue.submit(model.id, { input: submitInput });
     console.log(`[fal] Submitted, request_id: ${request_id}`);
-    if (onProgress) await onProgress(20);
-
-    // Poll until complete — send graduated progress to keep updated_at fresh (prevents watchdog kill)
-    const startTime = Date.now();
-    let lastProgressPct = 20;
-
-    while (Date.now() - startTime < OPERATION_TIMEOUT) {
-      await new Promise(r => setTimeout(r, POLL_INTERVAL));
-
-      const status = await fal.queue.status(model.id, { requestId: request_id, logs: false });
-      const elapsed = Math.round((Date.now() - startTime) / 1000);
-      console.log(`[fal] Poll ${elapsed}s: status=${status.status}`);
-
-      // Graduated progress: 20→65 during polling (keeps updated_at fresh for watchdog)
-      if (onProgress && (status.status === 'IN_QUEUE' || status.status === 'IN_PROGRESS')) {
-        const newPct = Math.min(20 + Math.round((elapsed / (OPERATION_TIMEOUT / 1000)) * 45), 65);
-        if (newPct > lastProgressPct) {
-          await onProgress(newPct);
-          lastProgressPct = newPct;
-        }
-      }
-
-      if (status.status === 'COMPLETED') {
-        if (onProgress) await onProgress(70);
-
-        const result = await fal.queue.result(model.id, { requestId: request_id });
-        console.log(`[fal] Raw result keys:`, Object.keys(result.data || result));
-        console.log(`[fal] Result preview:`, JSON.stringify(result.data || result).slice(0, 500));
-
-        // Extract video URL — try common response shapes
-        const data = result.data || result;
-        const videoUrl = data?.video?.url || data?.output?.url || data?.url;
-        if (!videoUrl) {
-          throw makeError('PROVIDER_ERROR', `No video URL in fal response: ${JSON.stringify(data).slice(0, 200)}`);
-        }
-
-        if (onProgress) await onProgress(80);
-
-        // Download and re-upload to our S3
-        const videoRes = await fetch(videoUrl);
-        if (!videoRes.ok) throw makeError('PROVIDER_ERROR', `Failed to download video: ${videoRes.status}`);
-        const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
-
-        const key = `projects/${projectId}/creative-${Date.now()}.mp4`;
-        const ourUrl = await uploadBuffer({ buffer: videoBuffer, key, contentType: 'video/mp4' });
-
-        console.log(`[fal] Uploaded to S3: ${ourUrl} (${videoBuffer.length} bytes)`);
-        if (onProgress) await onProgress(95);
-
-        return { ok: true, data: { video_url: ourUrl } };
-      }
-
-      if (status.status === 'FAILED') {
-        throw makeError('PROVIDER_ERROR', `fal generation failed: ${status.error || 'unknown'}`);
-      }
-    }
-
-    throw makeError('TIMEOUT', `fal timed out after ${OPERATION_TIMEOUT / 1000}s`);
+    return { request_id };
   } catch (err) {
-    if (err.code) throw err;
-
     const msg = err.message || String(err);
-    if (msg.includes('401') || msg.includes('Unauthorized') || msg.includes('authentication')) {
-      throw makeError('AUTH_ERROR', `fal auth: ${msg}`);
-    }
-    if (msg.includes('429') || msg.includes('rate')) {
-      throw makeError('RATE_LIMIT', `fal rate limit: ${msg}`);
-    }
-    if (msg.includes('400') || msg.includes('validation')) {
-      throw makeError('INVALID_INPUT', `fal input error: ${msg}`);
-    }
-    throw makeError('PROVIDER_ERROR', `fal error: ${msg}`);
+    if (msg.includes('401') || msg.includes('Unauthorized')) throw makeError('AUTH_ERROR', msg);
+    if (msg.includes('429') || msg.includes('rate')) throw makeError('RATE_LIMIT', msg);
+    if (msg.includes('400') || msg.includes('validation')) throw makeError('INVALID_INPUT', msg);
+    throw makeError('PROVIDER_ERROR', `fal submit error: ${msg}`);
   }
+}
+
+/**
+ * Poll fal until COMPLETED/FAILED or timeout. Returns { status, data? }.
+ * onProgress receives graduated 20→65%.
+ */
+export async function pollFal({ modelKey, requestId, onProgress, timeoutMs }) {
+  ensureConfig();
+  const model = VIDEO_MODELS[modelKey];
+  if (!model) throw makeError('INVALID_INPUT', `Unknown model: ${modelKey}`);
+
+  const timeout = timeoutMs || POLL_TIMEOUT;
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeout) {
+    await new Promise(r => setTimeout(r, POLL_INTERVAL));
+
+    const status = await fal.queue.status(model.id, { requestId, logs: false });
+    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    console.log(`[fal] Poll ${elapsed}s: status=${status.status}`);
+
+    // Graduated progress 20→65
+    if (onProgress && (status.status === 'IN_QUEUE' || status.status === 'IN_PROGRESS')) {
+      const pct = Math.min(20 + Math.round((elapsed / (timeout / 1000)) * 45), 65);
+      await onProgress(pct);
+    }
+
+    if (status.status === 'COMPLETED') {
+      return { status: 'COMPLETED' };
+    }
+
+    if (status.status === 'FAILED') {
+      return { status: 'FAILED', error: status.error || 'fal generation failed' };
+    }
+  }
+
+  return { status: 'POLL_TIMEOUT' };
+}
+
+/**
+ * Fetch result from fal for a completed request. Download video and re-upload to S3.
+ */
+export async function fetchAndUpload({ modelKey, requestId, projectId }) {
+  ensureConfig();
+  const model = VIDEO_MODELS[modelKey];
+
+  const result = await fal.queue.result(model.id, { requestId });
+  const data = result.data || result;
+  console.log(`[fal] Result keys:`, Object.keys(data));
+  console.log(`[fal] Result preview:`, JSON.stringify(data).slice(0, 500));
+
+  const videoUrl = data?.video?.url || data?.output?.url || data?.url;
+  if (!videoUrl) {
+    throw makeError('PROVIDER_ERROR', `No video URL in fal response: ${JSON.stringify(data).slice(0, 200)}`);
+  }
+
+  const returnedSeed = data?.seed;
+
+  // Download and re-upload to S3
+  const videoRes = await fetch(videoUrl);
+  if (!videoRes.ok) throw makeError('PROVIDER_ERROR', `Failed to download video: ${videoRes.status}`);
+  const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
+
+  const key = `projects/${projectId}/creative-${Date.now()}.mp4`;
+  const ourUrl = await uploadBuffer({ buffer: videoBuffer, key, contentType: 'video/mp4' });
+  console.log(`[fal] Uploaded to S3: ${ourUrl} (${videoBuffer.length} bytes)`);
+
+  return { video_url: ourUrl, fal_seed: returnedSeed };
 }

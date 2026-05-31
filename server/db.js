@@ -57,7 +57,21 @@ export async function initDB() {
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );
+    -- Sprint A fixes: seed, dedup, reconciler
+    ALTER TABLE generation_jobs ADD COLUMN IF NOT EXISTS seed BIGINT;
+    ALTER TABLE generation_jobs ADD COLUMN IF NOT EXISTS fal_request_id TEXT;
+    ALTER TABLE generation_jobs ADD COLUMN IF NOT EXISTS last_polled_at TIMESTAMPTZ;
+    ALTER TABLE generation_jobs ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+    ALTER TABLE generation_jobs ADD COLUMN IF NOT EXISTS refunded BOOLEAN DEFAULT FALSE;
   `);
+
+  // Partial unique index for dedup (only active jobs)
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_job
+    ON generation_jobs (idempotency_key)
+    WHERE status IN ('pending','running') AND idempotency_key IS NOT NULL
+  `).catch(() => {}); // ignore if already exists
+
   console.log('DB tables ready');
 }
 

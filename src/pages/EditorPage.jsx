@@ -82,13 +82,9 @@ export default function EditorPage() {
   }
 
   async function handleCreate() {
-    if (!imageUrl || !config) return;
+    if (!imageUrl || !config || creating) return;
     setCreating(true);
     setError('');
-
-    const motionPrompt = customPrompt.trim() || config.motion_presets.find(p => p.key === motionKey)?.label || motionKey;
-    // Find full prompt from server presets or use custom
-    const presetData = config.motion_presets.find(p => p.key === motionKey);
 
     try {
       // Create project
@@ -113,6 +109,8 @@ export default function EditorPage() {
     } catch (err) {
       if (err.data?.error === 'INSUFFICIENT_CREDITS') {
         setError(`Недостаточно кредитов. Нужно ${modelCredits}.`);
+      } else if (err.data?.error === 'TOO_MANY_ACTIVE_JOBS') {
+        setError('Уже есть активная генерация. Дождитесь завершения.');
       } else {
         setError('Ошибка создания задачи');
       }
