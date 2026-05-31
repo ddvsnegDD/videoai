@@ -27,7 +27,7 @@ export const MOTION_PRESETS = [
   { key: 'float', label: 'Парение', prompt: 'product gently floating with subtle movement, soft light, premium commercial product video' },
 ];
 
-const OPERATION_TIMEOUT = 5 * 60 * 1000; // 5 min
+const OPERATION_TIMEOUT = 8 * 60 * 1000; // 8 min (Wan can take 2-5 min + queue)
 const POLL_INTERVAL = 5000;
 
 function makeError(code, message) {
