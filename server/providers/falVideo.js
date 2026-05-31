@@ -64,7 +64,7 @@ export async function animateImage({ imageUrl, modelKey, motionPrompt, projectId
         image_url: imageUrl,
         prompt: promptText,
         resolution: '720p',           // WanEnum: "720p" | "1080p"
-        duration: '5',                 // WanEnum: "2"-"15" (string number, no suffix)
+        duration: 5,                   // WanEnum: NUMBER 2-15 (not a string!)
         negative_prompt: 'low quality, distortion, warping, blurry, text overlay',
         enable_prompt_expansion: false, // keep our prompt as-is
       };
