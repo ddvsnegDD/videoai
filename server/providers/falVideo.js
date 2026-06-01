@@ -6,9 +6,9 @@ const CREDITS_VEO = Number(process.env.CREDITS_VEO) || 90;
 
 export const VIDEO_MODELS = {
   wan: {
-    id: 'fal-ai/wan/v2.7/image-to-video',
-    label: 'Эконом (Wan)',
-    label_full: 'Быстрый, доступный — для массовых креативов',
+    id: 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video',
+    label: 'Эконом (Kling)',
+    label_full: 'Плавное движение, высокая точность промпта',
     credits: CREDITS_WAN,
   },
   veo: {
@@ -58,11 +58,9 @@ export async function submitToFal({ imageUrl, modelKey, motionPrompt, seed }) {
     submitInput = {
       image_url: imageUrl,
       prompt: promptText,
-      seed,
-      resolution: '720p',
-      duration: 5,
-      negative_prompt: 'low quality, distortion, warping, blurry, text overlay',
-      enable_prompt_expansion: false,
+      duration: '5',
+      negative_prompt: 'blur, distort, low quality, warped text, distorted lettering, deformed logo',
+      cfg_scale: 0.5,
     };
   } else {
     submitInput = {
