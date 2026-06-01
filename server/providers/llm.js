@@ -129,6 +129,27 @@ The user describes a product in Russian. Your job:
 4. Keep text/logos on packaging readable — mention "sharp readable text on label" in the prompt.
 5. Output ONLY the English prompt, no explanations, no markdown, no quotes.`;
 
+const IMAGE_PROMPT_SYSTEM_STRICT = `You MUST output ONLY an English prompt for an AI image generator. No Russian, no Cyrillic characters, no explanations, no markdown, no quotes. English only. Output the prompt and nothing else.
+
+The user describes a product. Create a detailed image generation prompt describing: the product, background, camera angle, lighting, premium commercial product photography style. Mention "sharp readable text on label".`;
+
+const CYRILLIC_RE = /[а-яёА-ЯЁ]/;
+
+function cleanPromptOutput(raw) {
+  let s = raw.trim();
+  // Strip markdown code fences
+  s = s.replace(/^```[\s\S]*?\n/, '').replace(/\n?```\s*$/, '');
+  // Strip backtick wrapping
+  s = s.replace(/^`+|`+$/g, '');
+  // Strip outer quotes (double, single, «»)
+  s = s.replace(/^["'«]+|["'»]+$/g, '');
+  // Strip leading labels
+  s = s.replace(/^(?:Prompt|Image prompt|Here is|Here's|Output|Промпт|Результат)\s*[:：]\s*/i, '');
+  // Collapse whitespace/newlines
+  s = s.replace(/\s+/g, ' ').trim();
+  return s;
+}
+
 export async function buildImagePrompt({ productType, details, style }) {
   if (!productType) throw makeError('INVALID_INPUT', 'productType is required');
 
@@ -140,13 +161,36 @@ export async function buildImagePrompt({ productType, details, style }) {
 
   console.log(`[GigaChat] buildImagePrompt input: ${userMsg}`);
 
-  const prompt = await chatCompletion([
+  // First attempt
+  const raw = await chatCompletion([
     { role: 'system', content: IMAGE_PROMPT_SYSTEM },
     { role: 'user', content: userMsg },
   ], { temperature: 0.7, maxTokens: 512 });
 
-  const cleaned = prompt.replace(/^["'`]+|["'`]+$/g, '').trim();
-  console.log(`[GigaChat] buildImagePrompt result: ${cleaned.slice(0, 200)}`);
+  let cleaned = cleanPromptOutput(raw);
+  console.log(`[GigaChat] buildImagePrompt attempt 1: ${cleaned.slice(0, 200)}`);
+
+  // Check for Cyrillic — retry once with stricter system prompt
+  if (CYRILLIC_RE.test(cleaned)) {
+    console.warn(`[GigaChat] buildImagePrompt: Cyrillic detected, retrying with strict prompt`);
+
+    const raw2 = await chatCompletion([
+      { role: 'system', content: IMAGE_PROMPT_SYSTEM_STRICT },
+      { role: 'user', content: userMsg },
+    ], { temperature: 0.5, maxTokens: 512 });
+
+    cleaned = cleanPromptOutput(raw2);
+    console.log(`[GigaChat] buildImagePrompt attempt 2: ${cleaned.slice(0, 200)}`);
+
+    if (CYRILLIC_RE.test(cleaned)) {
+      console.error(`[GigaChat] buildImagePrompt: Cyrillic after retry, aborting`);
+      throw makeError('INVALID_PROMPT', 'GigaChat returned Cyrillic prompt after retry — image generation aborted');
+    }
+  }
+
+  if (!cleaned || cleaned.length < 10) {
+    throw makeError('INVALID_PROMPT', 'GigaChat returned empty or too short prompt');
+  }
 
   return { prompt: cleaned };
 }

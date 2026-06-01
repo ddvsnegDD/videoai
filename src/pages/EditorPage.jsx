@@ -69,11 +69,13 @@ export default function EditorPage() {
   const credits = user?.credits ?? 0;
   const freeWan = user?.free_wan ?? 0;
   const freeVeo = user?.free_veo ?? 0;
+  const freeImage = user?.free_image ?? 0;
   const modelCredits = config?.video_models?.[modelKey]?.credits ?? 0;
   const creditsImage = config?.credits_image ?? 13;
   const isFree = (modelKey === 'wan' && freeWan > 0) || (modelKey === 'veo' && freeVeo > 0);
+  const isFreeImage = freeImage > 0;
   const canAfford = isFree || credits >= modelCredits;
-  const canAffordImage = credits >= creditsImage;
+  const canAffordImage = isFreeImage || credits >= creditsImage;
 
   // Step derivation
   let step;
@@ -340,7 +342,7 @@ export default function EditorPage() {
                 <Wand2 size={22} color={C.primary} />
               </div>
               <p style={{ fontWeight: 700, fontSize: '0.9375rem', color: C.dark, marginBottom: 4 }}>Сгенерировать</p>
-              <p style={{ color: C.gray400, fontSize: '0.75rem' }}>AI создаст картинку · {creditsImage} кр.</p>
+              <p style={{ color: C.gray400, fontSize: '0.75rem' }}>{isFreeImage ? 'Первая картинка бесплатно' : `AI создаст картинку · ${creditsImage} кр.`}</p>
             </button>
           </div>
         )}
@@ -415,7 +417,11 @@ export default function EditorPage() {
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
               <p style={{ color: C.gray400, fontSize: '0.8125rem' }}>
-                Стоимость: <strong style={{ color: C.primary }}>{creditsImage} кр.</strong> У вас: <strong>{credits}</strong>
+                {isFreeImage ? (
+                  <><strong style={{ color: C.primary }}>Бесплатно</strong> (пробная генерация)</>
+                ) : (
+                  <>Стоимость: <strong style={{ color: C.primary }}>{creditsImage} кр.</strong> У вас: <strong>{credits}</strong></>
+                )}
               </p>
               <Btn variant="primary" size="lg" disabled={!productType.trim() || generatingPrompt || !canAffordImage} onClick={handleGenerateImage}>
                 {generatingPrompt ? (
@@ -467,7 +473,10 @@ export default function EditorPage() {
                 {showRegenConfirm ? (
                   <div style={{ background: C.bgWarm, borderRadius: 12, padding: 16, marginBottom: 16 }}>
                     <p style={{ fontSize: '0.875rem', color: C.dark, marginBottom: 12 }}>
-                      Будет списано <strong style={{ color: C.primary }}>{creditsImage} кр.</strong> Продолжить?
+                      {isFreeImage
+                        ? <><strong style={{ color: C.primary }}>Бесплатно</strong> (пробная генерация). Продолжить?</>
+                        : <>Будет списано <strong style={{ color: C.primary }}>{creditsImage} кр.</strong> Продолжить?</>
+                      }
                     </p>
                     <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
                       <Btn variant="primary" size="sm" disabled={!canAffordImage} onClick={handleRegenImage}>Да, перегенерировать</Btn>
@@ -480,7 +489,7 @@ export default function EditorPage() {
                       <Sparkles size={16} /> Оживить
                     </Btn>
                     <Btn variant="outline" size="md" onClick={() => setShowRegenConfirm(true)}>
-                      <RefreshCw size={16} /> Перегенерировать ({creditsImage} кр.)
+                      <RefreshCw size={16} /> Перегенерировать {isFreeImage ? '(бесплатно)' : `(${creditsImage} кр.)`}
                     </Btn>
                   </div>
                 )}

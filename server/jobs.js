@@ -60,7 +60,7 @@ export async function createJob({ userId, projectId, type, input, costCredits, f
 
     // Charge credits
     const userRow = await client.query(
-      'SELECT credits, free_wan, free_veo FROM users WHERE id = $1 FOR UPDATE',
+      'SELECT credits, free_wan, free_veo, free_image FROM users WHERE id = $1 FOR UPDATE',
       [userId],
     );
     if (userRow.rows.length === 0) throw new Error('USER_NOT_FOUND');
@@ -366,7 +366,7 @@ async function failJob(jobId, userId, costCredits, errorMsg, shouldRefund = true
 
   let freeColumn = null;
   const input = jobData.input;
-  if (input?._freeColumn && ['free_wan', 'free_veo'].includes(input._freeColumn)) {
+  if (input?._freeColumn && ['free_wan', 'free_veo', 'free_image'].includes(input._freeColumn)) {
     freeColumn = input._freeColumn;
   }
 

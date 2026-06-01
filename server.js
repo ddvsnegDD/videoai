@@ -242,12 +242,17 @@ app.post('/api/jobs', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'missing_image_prompt' });
       }
 
+      // Check free image trial
+      const imgUserRow = await pool.query('SELECT free_image FROM users WHERE id = $1', [req.userId]);
+      const hasFreeImage = imgUserRow.rows[0]?.free_image > 0;
+
       const { jobId } = await createJob({
         userId: req.userId,
         projectId,
         type,
         input: { ...input, projectId },
-        costCredits: IMAGE_MODEL.credits,
+        costCredits: hasFreeImage ? 0 : IMAGE_MODEL.credits,
+        freeColumn: hasFreeImage ? 'free_image' : null,
       });
       return res.json({ jobId });
     }
@@ -305,7 +310,7 @@ async function requireAdmin(req, res, next) {
 app.get('/api/admin/users', requireAdmin, async (_req, res) => {
   try {
     const result = await pool.query(`
-      SELECT u.id, u.email, u.credits, u.role, u.free_wan, u.free_veo, u.created_at,
+      SELECT u.id, u.email, u.credits, u.role, u.free_wan, u.free_veo, u.free_image, u.created_at,
              COUNT(p.id)::int AS projects_count
       FROM users u LEFT JOIN projects p ON p.user_id = u.id
       GROUP BY u.id ORDER BY u.created_at DESC LIMIT 100

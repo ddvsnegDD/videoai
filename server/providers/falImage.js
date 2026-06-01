@@ -83,16 +83,39 @@ export async function pollFalImage({ requestId, onProgress, timeoutMs }) {
   return { status: 'POLL_TIMEOUT' };
 }
 
+function extractImageUrl(data) {
+  // Try multiple paths — fal response format can vary
+  const candidates = [
+    data?.images?.[0]?.url,
+    typeof data?.images?.[0] === 'string' ? data.images[0] : null,
+    data?.image?.url,
+    data?.url,
+    data?.output?.[0]?.url,
+    typeof data?.output?.[0] === 'string' ? data.output[0] : null,
+  ];
+  for (let i = 0; i < candidates.length; i++) {
+    if (candidates[i] && typeof candidates[i] === 'string' && candidates[i].startsWith('http')) {
+      const keys = ['images[0].url', 'images[0] (string)', 'image.url', 'url', 'output[0].url', 'output[0] (string)'];
+      console.log(`[fal-image] URL extracted via: ${keys[i]}`);
+      return candidates[i];
+    }
+  }
+  return null;
+}
+
 export async function fetchImageAndUpload({ requestId, userId }) {
   ensureConfig();
 
   const result = await fal.queue.result(IMAGE_MODEL.id, { requestId });
   const data = result.data || result;
   console.log(`[fal-image] Result keys:`, Object.keys(data));
+  console.log(`[fal-image] Result preview:`, JSON.stringify(data).slice(0, 500));
 
-  const imageUrl = data?.images?.[0]?.url;
+  const imageUrl = extractImageUrl(data);
   if (!imageUrl) {
-    throw makeError('PROVIDER_ERROR', `No image URL in fal response: ${JSON.stringify(data).slice(0, 200)}`);
+    // COMPLETED but no URL — fal already charged. Do NOT re-submit.
+    // Throw so failJob refunds the user; request_id stays for manual investigation.
+    throw makeError('PROVIDER_ERROR', `COMPLETED but no image URL in fal response: ${JSON.stringify(data).slice(0, 300)}`);
   }
 
   const returnedSeed = data?.seed;
