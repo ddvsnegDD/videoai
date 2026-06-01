@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Sparkles, ArrowLeft, RefreshCw, Download, Play, Camera, RotateCw, Orbit, Wind, Zap, Crown } from 'lucide-react';
+import { Upload, Sparkles, ArrowLeft, RefreshCw, Download, Camera, RotateCw, Orbit, Wind, Zap, Crown, Wand2, ImagePlus } from 'lucide-react';
 import { C } from '../lib/theme.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.jsx';
@@ -15,9 +15,28 @@ export default function EditorPage() {
   const navigate = useNavigate();
 
   const [config, setConfig] = useState(null);
+
+  // Source mode: null (choosing), 'upload', 'generate'
+  const [mode, setMode] = useState(null);
+
+  // Upload flow
   const [imageUrl, setImageUrl] = useState(null);
   const [imageFile, setImageFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const fileRef = useRef(null);
+
+  // Generate flow
+  const [productType, setProductType] = useState('');
+  const [details, setDetails] = useState('');
+  const [style, setStyle] = useState('');
+  const [generatingPrompt, setGeneratingPrompt] = useState(false);
+  const [imagePrompt, setImagePrompt] = useState('');
+  const [imageJobId, setImageJobId] = useState(null);
+  const { job: imageJob } = useJobPolling(imageJobId);
+  const [projectId, setProjectId] = useState(null);
+  const [imageSource, setImageSource] = useState(null); // 'upload' | 'generated'
+
+  // Animate flow
   const [motionKey, setMotionKey] = useState('push_in');
   const [customPrompt, setCustomPrompt] = useState('');
   const [modelKey, setModelKey] = useState('wan');
@@ -25,7 +44,9 @@ export default function EditorPage() {
   const [error, setError] = useState('');
   const [jobId, setJobId] = useState(null);
   const { job } = useJobPolling(jobId);
-  const fileRef = useRef(null);
+
+  // Regen confirmation
+  const [showRegenConfirm, setShowRegenConfirm] = useState(false);
 
   useEffect(() => {
     api.get('/config').then(setConfig).catch(() => {});
@@ -35,17 +56,52 @@ export default function EditorPage() {
     if (job?.status === 'done' || job?.status === 'failed') refresh();
   }, [job?.status]);
 
+  // When image job completes, extract image_url
+  useEffect(() => {
+    if (imageJob?.status === 'done' && imageJob?.output?.image_url) {
+      setImageUrl(imageJob.output.image_url);
+      setImageSource('generated');
+      refresh();
+    }
+    if (imageJob?.status === 'failed') refresh();
+  }, [imageJob?.status]);
+
   const credits = user?.credits ?? 0;
   const freeWan = user?.free_wan ?? 0;
   const freeVeo = user?.free_veo ?? 0;
   const modelCredits = config?.video_models?.[modelKey]?.credits ?? 0;
+  const creditsImage = config?.credits_image ?? 13;
   const isFree = (modelKey === 'wan' && freeWan > 0) || (modelKey === 'veo' && freeVeo > 0);
   const canAfford = isFree || credits >= modelCredits;
+  const canAffordImage = credits >= creditsImage;
 
-  // Step logic
-  const step = jobId
-    ? (job?.status === 'done' ? 'result' : 'generating')
-    : imageUrl ? 'configure' : 'upload';
+  // Step derivation
+  let step;
+  if (jobId) {
+    step = job?.status === 'done' ? 'result' : 'generating';
+  } else if (imageUrl && !imageJobId) {
+    // Has image (uploaded or confirmed generated) → configure animate
+    step = 'configure';
+  } else if (imageUrl && imageJobId) {
+    // Generated image confirmed → configure animate
+    step = 'configure';
+  } else if (imageJobId) {
+    if (imageJob?.status === 'done') {
+      step = 'confirm_image';
+    } else if (imageJob?.status === 'failed') {
+      step = 'confirm_image';
+    } else {
+      step = 'generating_image';
+    }
+  } else if (mode === 'generate') {
+    step = 'generate_form';
+  } else if (mode === 'upload') {
+    step = 'upload';
+  } else {
+    step = 'source_select';
+  }
+
+  // ── Handlers ──
 
   async function handleFile(file) {
     if (!file) return;
@@ -59,14 +115,11 @@ export default function EditorPage() {
     try {
       const fd = new FormData();
       fd.append('image', file);
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: fd,
-        credentials: 'include',
-      });
+      const res = await fetch('/api/upload', { method: 'POST', body: fd, credentials: 'include' });
       if (!res.ok) throw new Error('Upload failed');
       const data = await res.json();
       setImageUrl(data.url);
+      setImageSource('upload');
     } catch {
       setError('Ошибка загрузки. Попробуйте ещё раз.');
       setImageFile(null);
@@ -81,21 +134,108 @@ export default function EditorPage() {
     if (file) handleFile(file);
   }
 
+  async function handleGenerateImage() {
+    if (!productType.trim() || generatingPrompt || !canAffordImage) return;
+    setGeneratingPrompt(true);
+    setError('');
+
+    try {
+      // 1. Build prompt via GigaChat
+      const promptRes = await api.post('/build-image-prompt', {
+        productType: productType.trim(),
+        details: details.trim() || undefined,
+        style: style.trim() || undefined,
+      });
+      setImagePrompt(promptRes.prompt);
+
+      // 2. Create project
+      const proj = await api.post('/projects', {
+        title: `Креатив ${new Date().toLocaleDateString('ru-RU')}`,
+        brief: {
+          source: 'generated',
+          product_type: productType.trim(),
+          details: details.trim(),
+          style: style.trim(),
+          image_prompt: promptRes.prompt,
+        },
+      });
+      setProjectId(proj.project.id);
+
+      // 3. Create image job
+      const jobRes = await api.post('/jobs', {
+        projectId: proj.project.id,
+        type: 'image',
+        input: { prompt: promptRes.prompt },
+      });
+      setImageJobId(jobRes.jobId);
+      refresh();
+    } catch (err) {
+      if (err.data?.error === 'INSUFFICIENT_CREDITS') {
+        setError(`Недостаточно кредитов. Нужно ${creditsImage}.`);
+      } else if (err.data?.error === 'TOO_MANY_ACTIVE_JOBS') {
+        setError('Уже есть активная генерация. Дождитесь завершения.');
+      } else if (err.data?.error === 'llm_unavailable') {
+        setError('GigaChat временно недоступен. Попробуйте позже.');
+      } else {
+        setError('Ошибка генерации картинки');
+      }
+    } finally {
+      setGeneratingPrompt(false);
+    }
+  }
+
+  async function handleRegenImage() {
+    if (!projectId || !imagePrompt || !canAffordImage) return;
+    setShowRegenConfirm(false);
+    setError('');
+    setImageUrl(null);
+    setImageSource(null);
+
+    try {
+      const jobRes = await api.post('/jobs', {
+        projectId,
+        type: 'image',
+        input: { prompt: imagePrompt },
+      });
+      setImageJobId(jobRes.jobId);
+      refresh();
+    } catch (err) {
+      if (err.data?.error === 'INSUFFICIENT_CREDITS') {
+        setError(`Недостаточно кредитов. Нужно ${creditsImage}.`);
+      } else if (err.data?.error === 'TOO_MANY_ACTIVE_JOBS') {
+        setError('Уже есть активная генерация. Дождитесь завершения.');
+      } else {
+        setError('Ошибка перегенерации');
+      }
+    }
+  }
+
+  function handleConfirmImage() {
+    // Image confirmed — move to configure step
+    // imageUrl is already set from imageJob.output
+    setImageJobId(null);
+  }
+
   async function handleCreate() {
     if (!imageUrl || !config || creating) return;
     setCreating(true);
     setError('');
 
     try {
-      // Create project
-      const proj = await api.post('/projects', {
-        title: `Креатив ${new Date().toLocaleDateString('ru-RU')}`,
-        brief: { source: 'upload', image_url: imageUrl, model: modelKey, motion: motionKey },
-      });
+      let pid = projectId;
 
-      // Create job
+      // If upload mode — create project now (generate mode created it earlier)
+      if (!pid) {
+        const proj = await api.post('/projects', {
+          title: `Креатив ${new Date().toLocaleDateString('ru-RU')}`,
+          brief: { source: 'upload', image_url: imageUrl, model: modelKey, motion: motionKey },
+        });
+        pid = proj.project.id;
+        setProjectId(pid);
+      }
+
       const res = await api.post('/jobs', {
-        projectId: proj.project.id,
+        projectId: pid,
         type: 'animate',
         input: {
           imageUrl,
@@ -121,14 +261,35 @@ export default function EditorPage() {
 
   function handleReset() {
     setJobId(null);
+    setImageJobId(null);
     setImageUrl(null);
     setImageFile(null);
+    setImageSource(null);
+    setProjectId(null);
+    setImagePrompt('');
+    setMode(null);
     setError('');
     setCustomPrompt('');
+    setProductType('');
+    setDetails('');
+    setStyle('');
+    setShowRegenConfirm(false);
     refresh();
   }
 
   const videoUrl = job?.output?.video_url;
+
+  // ── Subtitle text ──
+  const subtitles = {
+    source_select: 'Загрузите фото товара или опишите его — AI создаст картинку',
+    upload: 'Загрузите фото товара — AI оживит его в короткое видео',
+    generate_form: 'Опишите товар — AI сгенерирует картинку',
+    generating_image: 'Генерация картинки...',
+    confirm_image: imageJob?.status === 'failed' ? 'Ошибка генерации' : 'Проверьте картинку',
+    configure: 'Настройте движение и выберите модель',
+    generating: 'Генерация видео...',
+    result: 'Скачайте или создайте ещё',
+  };
 
   return (
     <div style={{ paddingTop: 96, paddingBottom: 80, minHeight: '100vh', background: C.bg }}>
@@ -144,52 +305,201 @@ export default function EditorPage() {
           {step === 'result' ? 'Креатив готов' : 'Новый креатив'}
         </h1>
         <p style={{ color: C.gray500, fontSize: '0.9375rem', marginBottom: 32 }}>
-          {step === 'upload' && 'Загрузите фото товара — AI оживит его в короткое видео'}
-          {step === 'configure' && 'Настройте движение и выберите модель'}
-          {step === 'generating' && 'Генерация...'}
-          {step === 'result' && 'Скачайте или создайте ещё'}
+          {subtitles[step]}
         </p>
 
-        {/* STEP 1: Upload */}
-        {step === 'upload' && (
-          <div
-            onDrop={handleDrop}
-            onDragOver={e => e.preventDefault()}
-            onClick={() => fileRef.current?.click()}
-            style={{
-              background: C.white, border: `2px dashed ${C.gray300}`, borderRadius: 20,
-              padding: '64px 32px', textAlign: 'center', cursor: 'pointer',
-              transition: 'border-color 0.2s',
-            }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = C.primary}
-            onMouseLeave={e => e.currentTarget.style.borderColor = C.gray300}
-          >
-            <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={e => handleFile(e.target.files?.[0])} />
-            {uploading ? (
-              <div className="spinner" style={{ margin: '0 auto 16px' }} />
-            ) : (
-              <div style={{ width: 64, height: 64, borderRadius: 16, background: C.primaryLight, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-                <Upload size={28} color={C.primary} />
+        {/* SOURCE SELECT */}
+        {step === 'source_select' && (
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button onClick={() => setMode('upload')}
+              style={{
+                flex: 1, padding: '32px 20px', borderRadius: 20,
+                border: `2px solid ${C.gray200}`, background: C.white,
+                cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = C.primary}
+              onMouseLeave={e => e.currentTarget.style.borderColor = C.gray200}
+            >
+              <div style={{ width: 48, height: 48, borderRadius: 14, background: C.primaryLight, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                <Upload size={22} color={C.primary} />
               </div>
-            )}
-            <h3 style={{ fontFamily: "'Manrope', sans-serif", fontSize: '1.125rem', fontWeight: 700, color: C.dark, marginBottom: 8 }}>
-              {uploading ? 'Загрузка...' : 'Перетащите фото сюда'}
-            </h3>
-            <p style={{ color: C.gray400, fontSize: '0.8125rem' }}>
-              или нажмите для выбора · JPG, PNG, WEBP · до 10 МБ
-            </p>
+              <p style={{ fontWeight: 700, fontSize: '0.9375rem', color: C.dark, marginBottom: 4 }}>Загрузить фото</p>
+              <p style={{ color: C.gray400, fontSize: '0.75rem' }}>У меня есть фото товара</p>
+            </button>
+
+            <button onClick={() => setMode('generate')}
+              style={{
+                flex: 1, padding: '32px 20px', borderRadius: 20,
+                border: `2px solid ${C.gray200}`, background: C.white,
+                cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = C.primary}
+              onMouseLeave={e => e.currentTarget.style.borderColor = C.gray200}
+            >
+              <div style={{ width: 48, height: 48, borderRadius: 14, background: C.primaryLight, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                <Wand2 size={22} color={C.primary} />
+              </div>
+              <p style={{ fontWeight: 700, fontSize: '0.9375rem', color: C.dark, marginBottom: 4 }}>Сгенерировать</p>
+              <p style={{ color: C.gray400, fontSize: '0.75rem' }}>AI создаст картинку · {creditsImage} кр.</p>
+            </button>
           </div>
         )}
 
-        {/* STEP 2: Configure */}
+        {/* UPLOAD */}
+        {step === 'upload' && (
+          <>
+            <div
+              onDrop={handleDrop}
+              onDragOver={e => e.preventDefault()}
+              onClick={() => fileRef.current?.click()}
+              style={{
+                background: C.white, border: `2px dashed ${C.gray300}`, borderRadius: 20,
+                padding: '64px 32px', textAlign: 'center', cursor: 'pointer',
+                transition: 'border-color 0.2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = C.primary}
+              onMouseLeave={e => e.currentTarget.style.borderColor = C.gray300}
+            >
+              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={e => handleFile(e.target.files?.[0])} />
+              {uploading ? (
+                <div className="spinner" style={{ margin: '0 auto 16px' }} />
+              ) : (
+                <div style={{ width: 64, height: 64, borderRadius: 16, background: C.primaryLight, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                  <Upload size={28} color={C.primary} />
+                </div>
+              )}
+              <h3 style={{ fontFamily: "'Manrope', sans-serif", fontSize: '1.125rem', fontWeight: 700, color: C.dark, marginBottom: 8 }}>
+                {uploading ? 'Загрузка...' : 'Перетащите фото сюда'}
+              </h3>
+              <p style={{ color: C.gray400, fontSize: '0.8125rem' }}>
+                или нажмите для выбора · JPG, PNG, WEBP · до 10 МБ
+              </p>
+            </div>
+            <button onClick={() => setMode(null)} style={{ display: 'block', margin: '16px auto 0', background: 'none', border: 'none', color: C.gray400, fontSize: '0.8125rem', cursor: 'pointer' }}>
+              ← Назад к выбору
+            </button>
+          </>
+        )}
+
+        {/* GENERATE FORM */}
+        {step === 'generate_form' && (
+          <div style={{ background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 20, padding: 24 }}>
+            <label className="label" style={{ marginBottom: 8 }}>Тип товара *</label>
+            <input
+              className="input"
+              placeholder="Например: крем для лица, кроссовки Nike, ароматическая свеча"
+              value={productType}
+              onChange={e => setProductType(e.target.value)}
+              style={{ marginBottom: 16, fontSize: '0.875rem' }}
+            />
+
+            <label className="label" style={{ marginBottom: 8 }}>Детали</label>
+            <input
+              className="input"
+              placeholder="Цвет, форма, текст на упаковке, особенности"
+              value={details}
+              onChange={e => setDetails(e.target.value)}
+              style={{ marginBottom: 16, fontSize: '0.875rem' }}
+            />
+
+            <label className="label" style={{ marginBottom: 8 }}>Стиль</label>
+            <input
+              className="input"
+              placeholder="Премиум, минимализм, яркий, тёмный фон..."
+              value={style}
+              onChange={e => setStyle(e.target.value)}
+              style={{ marginBottom: 20, fontSize: '0.875rem' }}
+            />
+
+            {error && <p style={{ color: C.danger, fontSize: '0.8125rem', marginBottom: 12 }}>{error}</p>}
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <p style={{ color: C.gray400, fontSize: '0.8125rem' }}>
+                Стоимость: <strong style={{ color: C.primary }}>{creditsImage} кр.</strong> У вас: <strong>{credits}</strong>
+              </p>
+              <Btn variant="primary" size="lg" disabled={!productType.trim() || generatingPrompt || !canAffordImage} onClick={handleGenerateImage}>
+                {generatingPrompt ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} /> Генерирую...
+                  </span>
+                ) : (
+                  <><ImagePlus size={18} /> Сгенерировать картинку</>
+                )}
+              </Btn>
+            </div>
+
+            <button onClick={() => setMode(null)} style={{ display: 'block', margin: '16px auto 0', background: 'none', border: 'none', color: C.gray400, fontSize: '0.8125rem', cursor: 'pointer' }}>
+              ← Назад к выбору
+            </button>
+          </div>
+        )}
+
+        {/* GENERATING IMAGE */}
+        {step === 'generating_image' && (
+          <div style={{ background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 20 }}>
+            <GenerationProgress job={imageJob} type="image" />
+          </div>
+        )}
+
+        {/* CONFIRM IMAGE */}
+        {step === 'confirm_image' && (
+          <div style={{ background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 20, padding: 24, textAlign: 'center' }}>
+            {imageJob?.status === 'failed' ? (
+              <>
+                <p style={{ color: C.danger, fontWeight: 600, marginBottom: 12 }}>Ошибка генерации картинки</p>
+                <p style={{ color: C.gray500, fontSize: '0.8125rem', marginBottom: 20 }}>{imageJob.error || 'Неизвестная ошибка'}</p>
+                <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                  <Btn variant="outline" size="md" onClick={handleReset}>
+                    <RefreshCw size={16} /> Начать заново
+                  </Btn>
+                </div>
+              </>
+            ) : (
+              <>
+                <img
+                  src={imageJob?.output?.image_url || imageUrl}
+                  alt="Сгенерированная картинка"
+                  style={{ width: '100%', maxWidth: 360, borderRadius: 16, marginBottom: 20, background: C.gray100 }}
+                />
+
+                {error && <p style={{ color: C.danger, fontSize: '0.8125rem', marginBottom: 12 }}>{error}</p>}
+
+                {showRegenConfirm ? (
+                  <div style={{ background: C.bgWarm, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+                    <p style={{ fontSize: '0.875rem', color: C.dark, marginBottom: 12 }}>
+                      Будет списано <strong style={{ color: C.primary }}>{creditsImage} кр.</strong> Продолжить?
+                    </p>
+                    <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                      <Btn variant="primary" size="sm" disabled={!canAffordImage} onClick={handleRegenImage}>Да, перегенерировать</Btn>
+                      <Btn variant="outline" size="sm" onClick={() => setShowRegenConfirm(false)}>Отмена</Btn>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <Btn variant="primary" size="md" onClick={handleConfirmImage}>
+                      <Sparkles size={16} /> Оживить
+                    </Btn>
+                    <Btn variant="outline" size="md" onClick={() => setShowRegenConfirm(true)}>
+                      <RefreshCw size={16} /> Перегенерировать ({creditsImage} кр.)
+                    </Btn>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* CONFIGURE */}
         {step === 'configure' && config && (
           <>
             {/* Preview */}
             <div style={{ background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 20, padding: 20, marginBottom: 20, display: 'flex', gap: 20, alignItems: 'center' }}>
               <img src={imageUrl} alt="" style={{ width: 100, height: 100, borderRadius: 12, objectFit: 'cover' }} />
               <div style={{ flex: 1 }}>
-                <p style={{ fontSize: '0.875rem', color: C.dark, fontWeight: 600, marginBottom: 4 }}>Фото загружено</p>
-                <button onClick={() => { setImageUrl(null); setImageFile(null); }} style={{ background: 'none', border: 'none', color: C.gray400, fontSize: '0.75rem', cursor: 'pointer', padding: 0 }}>
+                <p style={{ fontSize: '0.875rem', color: C.dark, fontWeight: 600, marginBottom: 4 }}>
+                  {imageSource === 'generated' ? 'Картинка сгенерирована' : 'Фото загружено'}
+                </p>
+                <button onClick={handleReset} style={{ background: 'none', border: 'none', color: C.gray400, fontSize: '0.75rem', cursor: 'pointer', padding: 0 }}>
                   Заменить
                 </button>
               </div>
@@ -281,7 +591,7 @@ export default function EditorPage() {
           </>
         )}
 
-        {/* STEP 3: Generating */}
+        {/* GENERATING VIDEO */}
         {step === 'generating' && (
           <div style={{ background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 20 }}>
             <GenerationProgress job={job} type="animate" />
@@ -295,7 +605,7 @@ export default function EditorPage() {
           </div>
         )}
 
-        {/* STEP 4: Result */}
+        {/* RESULT */}
         {step === 'result' && videoUrl && (
           <div style={{ background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 20, padding: 24, textAlign: 'center' }}>
             <video

@@ -6,6 +6,7 @@ import pool, { initDB } from './server/db.js';
 import { sendCode, verifyCode, requireAuth, getMe } from './server/auth.js';
 import { createJob, getJob, listJobs, runWatchdog, startReconciler } from './server/jobs.js';
 import { VIDEO_MODELS, MOTION_PRESETS } from './server/providers/falVideo.js';
+import { IMAGE_MODEL } from './server/providers/falImage.js';
 import { uploadBuffer } from './server/storage.js';
 
 const app = express();
@@ -88,6 +89,7 @@ app.get('/api/config', (_req, res) => {
       Object.entries(VIDEO_MODELS).map(([k, v]) => [k, { label: v.label, label_full: v.label_full, credits: v.credits }]),
     ),
     motion_presets: MOTION_PRESETS.map(p => ({ key: p.key, label: p.label })),
+    credits_image: IMAGE_MODEL.credits,
   });
 });
 
@@ -110,6 +112,22 @@ app.post('/api/upload', requireAuth, upload.single('image'), async (req, res) =>
   } catch (err) {
     console.error('upload error:', err);
     res.status(500).json({ error: 'upload_failed' });
+  }
+});
+
+// ── Build image prompt (GigaChat) ──
+app.post('/api/build-image-prompt', requireAuth, async (req, res) => {
+  try {
+    const { productType, details, style } = req.body;
+    if (!productType) return res.status(400).json({ error: 'missing_product_type' });
+
+    const { buildImagePrompt } = await import('./server/providers/llm.js');
+    const result = await buildImagePrompt({ productType, details, style });
+    res.json(result);
+  } catch (err) {
+    console.error('build-image-prompt error:', err);
+    if (err.code === 'AUTH_ERROR') return res.status(503).json({ error: 'llm_unavailable', message: err.message });
+    res.status(500).json({ error: 'server_error' });
   }
 });
 
@@ -197,7 +215,6 @@ app.post('/api/jobs', requireAuth, async (req, res) => {
       if (!input.imageUrl || !input.modelKey) {
         return res.status(400).json({ error: 'missing_animate_fields' });
       }
-      // Resolve motion prompt: custom text > preset lookup > default
       if (!input.motionPrompt) {
         const preset = MOTION_PRESETS.find(p => p.key === input.motionKey);
         input.motionPrompt = preset?.prompt || MOTION_PRESETS[0].prompt;
@@ -205,7 +222,6 @@ app.post('/api/jobs', requireAuth, async (req, res) => {
       const model = VIDEO_MODELS[input.modelKey];
       if (!model) return res.status(400).json({ error: 'invalid_model' });
 
-      // Check free try
       const freeCol = input.modelKey === 'wan' ? 'free_wan' : 'free_veo';
       const userRow = await pool.query(`SELECT ${freeCol} FROM users WHERE id = $1`, [req.userId]);
       const hasFree = userRow.rows[0]?.[freeCol] > 0;
@@ -217,6 +233,21 @@ app.post('/api/jobs', requireAuth, async (req, res) => {
         input: { ...input, projectId },
         costCredits: hasFree ? 0 : model.credits,
         freeColumn: hasFree ? freeCol : null,
+      });
+      return res.json({ jobId });
+    }
+
+    if (type === 'image') {
+      if (!input.prompt) {
+        return res.status(400).json({ error: 'missing_image_prompt' });
+      }
+
+      const { jobId } = await createJob({
+        userId: req.userId,
+        projectId,
+        type,
+        input: { ...input, projectId },
+        costCredits: IMAGE_MODEL.credits,
       });
       return res.json({ jobId });
     }

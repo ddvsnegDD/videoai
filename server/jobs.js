@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import pool from './db.js';
 import { submitToFal, pollFal, fetchAndUpload, POLL_TIMEOUT } from './providers/falVideo.js';
+import { submitImageToFal, pollFalImage, fetchImageAndUpload, POLL_TIMEOUT_IMAGE, IMAGE_MODEL } from './providers/falImage.js';
 
 const WATCHDOG_TIMEOUT_MIN = 20;
 const MAX_CONCURRENT_JOBS_PER_USER = 2;
@@ -12,8 +13,13 @@ function generateSeed() {
   return Math.floor(Math.random() * 2 ** 31);
 }
 
-function makeIdempotencyKey({ imageUrl, motionPrompt, modelKey, seed }) {
-  const raw = `${imageUrl}|${motionPrompt || ''}|${modelKey}|${seed}`;
+function makeIdempotencyKey(type, input, seed) {
+  let raw;
+  if (type === 'image') {
+    raw = `image|${input.prompt || ''}|${seed}`;
+  } else {
+    raw = `${input.imageUrl || ''}|${input.motionPrompt || ''}|${input.modelKey || ''}|${seed}`;
+  }
   return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 48);
 }
 
@@ -38,12 +44,7 @@ export async function createJob({ userId, projectId, type, input, costCredits, f
     const seed = generateSeed();
 
     // Build idempotency key
-    const idempotencyKey = makeIdempotencyKey({
-      imageUrl: input.imageUrl,
-      motionPrompt: input.motionPrompt,
-      modelKey: input.modelKey,
-      seed,
-    });
+    const idempotencyKey = makeIdempotencyKey(type, input, seed);
 
     // Dedup: check for existing active job for same user+project
     const existing = await client.query(
@@ -162,18 +163,26 @@ async function runJob(jobId) {
       }
     }
 
-    // Save video URL to project
-    if (type === 'animate' && result.video_url) {
+    // Save result URL to project
+    if (result.video_url || result.image_url) {
       try {
         const projRow = await pool.query('SELECT brief FROM projects WHERE id = $1', [project_id]);
         if (projRow.rows.length > 0) {
           const brief = typeof projRow.rows[0].brief === 'string'
             ? JSON.parse(projRow.rows[0].brief)
             : projRow.rows[0].brief;
-          await pool.query(
-            `UPDATE projects SET brief = $1, result_url = $2, status = 'ready' WHERE id = $3`,
-            [JSON.stringify({ ...brief, video_url: result.video_url, seed }), result.video_url, project_id],
-          );
+
+          if (type === 'animate' && result.video_url) {
+            await pool.query(
+              `UPDATE projects SET brief = $1, result_url = $2, status = 'ready' WHERE id = $3`,
+              [JSON.stringify({ ...brief, video_url: result.video_url, seed }), result.video_url, project_id],
+            );
+          } else if (type === 'image' && result.image_url) {
+            await pool.query(
+              `UPDATE projects SET brief = $1 WHERE id = $2`,
+              [JSON.stringify({ ...brief, image_url: result.image_url, seed }), project_id],
+            );
+          }
         }
       } catch (e) {
         console.error(`Job ${jobId}: failed to update project:`, e.message);
@@ -203,6 +212,9 @@ async function runJob(jobId) {
 async function executeType(type, input, jobId, seed, projectId) {
   if (type === 'animate') {
     return await runAnimate(input, jobId, seed, projectId);
+  }
+  if (type === 'image') {
+    return await runImage(input, jobId, seed, projectId);
   }
   throw Object.assign(new Error(`Type '${type}' not implemented`), { retryable: false });
 }
@@ -270,6 +282,66 @@ async function runAnimate(input, jobId, seed, projectId) {
   return { video_url: result.video_url, fal_seed: result.fal_seed };
 }
 
+async function runImage(input, jobId, seed, projectId) {
+  const progress = async (pct) => {
+    await pool.query('UPDATE generation_jobs SET progress = $1, updated_at = NOW() WHERE id = $2', [pct, jobId]);
+  };
+
+  await progress(10);
+
+  const { request_id } = await submitImageToFal({
+    prompt: input.prompt,
+    seed,
+    aspectRatio: input.aspectRatio,
+  });
+
+  await pool.query(
+    `UPDATE generation_jobs SET fal_request_id = $1, last_polled_at = NOW(), updated_at = NOW() WHERE id = $2`,
+    [request_id, jobId],
+  );
+
+  await progress(15);
+
+  const pollResult = await pollFalImage({
+    requestId: request_id,
+    onProgress: progress,
+    timeoutMs: POLL_TIMEOUT_IMAGE,
+  });
+
+  await pool.query(
+    `UPDATE generation_jobs SET last_polled_at = NOW() WHERE id = $1`,
+    [jobId],
+  );
+
+  if (pollResult.status === 'POLL_TIMEOUT') {
+    const err = new Error('Image generation timeout — reconciler will retry');
+    err.code = 'POLL_TIMEOUT';
+    err.retryable = false;
+    throw err;
+  }
+
+  if (pollResult.status === 'FAILED') {
+    const err = new Error(pollResult.error || 'fal image generation failed');
+    err.code = 'FAL_FAILED';
+    err.retryable = false;
+    throw err;
+  }
+
+  await progress(75);
+
+  const jobRow = await pool.query('SELECT user_id FROM generation_jobs WHERE id = $1', [jobId]);
+  const userId = jobRow.rows[0]?.user_id;
+
+  const result = await fetchImageAndUpload({
+    requestId: request_id,
+    userId,
+  });
+
+  await progress(95);
+
+  return { image_url: result.image_url, fal_seed: result.fal_seed };
+}
+
 // ── Fail job (idempotent refund) ──
 
 async function failJob(jobId, userId, costCredits, errorMsg, shouldRefund = true) {
@@ -334,7 +406,7 @@ export async function runWatchdog() {
 export async function runReconciler() {
   try {
     const orphans = await pool.query(
-      `SELECT id, user_id, project_id, cost_credits, input, seed, fal_request_id
+      `SELECT id, type, user_id, project_id, cost_credits, input, seed, fal_request_id
        FROM generation_jobs
        WHERE status IN ('pending','running')
          AND fal_request_id IS NOT NULL
@@ -344,78 +416,100 @@ export async function runReconciler() {
 
     for (const row of orphans.rows) {
       try {
-        console.log(`[Reconciler] Checking job ${row.id}, fal_request_id=${row.fal_request_id}`);
+        console.log(`[Reconciler] Checking job ${row.id} (type=${row.type}), fal_request_id=${row.fal_request_id}`);
 
-        const modelKey = row.input?.modelKey;
-        if (!modelKey) {
-          await failJob(row.id, row.user_id, row.cost_credits, 'Reconciler: missing modelKey', true);
-          continue;
-        }
-
-        // Update last_polled_at to prevent other reconciler runs from picking it up
         await pool.query(
           'UPDATE generation_jobs SET last_polled_at = NOW() WHERE id = $1',
           [row.id],
         );
 
-        // Check status at fal
         const { fal } = await import('@fal-ai/client');
         const key = process.env.FAL_KEY;
         if (key) fal.config({ credentials: key });
 
-        const { VIDEO_MODELS } = await import('./providers/falVideo.js');
-        const model = VIDEO_MODELS[modelKey];
-        if (!model) {
-          await failJob(row.id, row.user_id, row.cost_credits, 'Reconciler: unknown model', true);
-          continue;
+        // Resolve fal endpoint based on job type
+        let falEndpoint;
+        if (row.type === 'image') {
+          const { IMAGE_MODEL } = await import('./providers/falImage.js');
+          falEndpoint = IMAGE_MODEL.id;
+        } else {
+          const modelKey = row.input?.modelKey;
+          if (!modelKey) {
+            await failJob(row.id, row.user_id, row.cost_credits, 'Reconciler: missing modelKey', true);
+            continue;
+          }
+          const { VIDEO_MODELS } = await import('./providers/falVideo.js');
+          const model = VIDEO_MODELS[modelKey];
+          if (!model) {
+            await failJob(row.id, row.user_id, row.cost_credits, 'Reconciler: unknown model', true);
+            continue;
+          }
+          falEndpoint = model.id;
         }
 
-        const status = await fal.queue.status(model.id, { requestId: row.fal_request_id, logs: false });
+        const status = await fal.queue.status(falEndpoint, { requestId: row.fal_request_id, logs: false });
         console.log(`[Reconciler] Job ${row.id}: fal status = ${status.status}`);
 
         if (status.status === 'COMPLETED') {
-          // Fetch result and finalize
           try {
-            const result = await fetchAndUpload({
-              modelKey,
-              requestId: row.fal_request_id,
-              projectId: row.project_id,
-            });
+            let output;
 
-            // Update project
-            try {
-              const projRow = await pool.query('SELECT brief FROM projects WHERE id = $1', [row.project_id]);
-              if (projRow.rows.length > 0) {
-                const brief = typeof projRow.rows[0].brief === 'string'
-                  ? JSON.parse(projRow.rows[0].brief)
-                  : projRow.rows[0].brief;
-                await pool.query(
-                  `UPDATE projects SET brief = $1, result_url = $2, status = 'ready' WHERE id = $3`,
-                  [JSON.stringify({ ...brief, video_url: result.video_url, seed: row.seed }), result.video_url, row.project_id],
-                );
+            if (row.type === 'image') {
+              const { fetchImageAndUpload } = await import('./providers/falImage.js');
+              const result = await fetchImageAndUpload({ requestId: row.fal_request_id, userId: row.user_id });
+              output = { image_url: result.image_url, fal_seed: result.fal_seed };
+
+              try {
+                const projRow = await pool.query('SELECT brief FROM projects WHERE id = $1', [row.project_id]);
+                if (projRow.rows.length > 0) {
+                  const brief = typeof projRow.rows[0].brief === 'string'
+                    ? JSON.parse(projRow.rows[0].brief) : projRow.rows[0].brief;
+                  await pool.query(
+                    `UPDATE projects SET brief = $1 WHERE id = $2`,
+                    [JSON.stringify({ ...brief, image_url: result.image_url, seed: row.seed }), row.project_id],
+                  );
+                }
+              } catch (e) {
+                console.error(`[Reconciler] Job ${row.id}: project update failed:`, e.message);
               }
-            } catch (e) {
-              console.error(`[Reconciler] Job ${row.id}: project update failed:`, e.message);
+            } else {
+              const result = await fetchAndUpload({
+                modelKey: row.input?.modelKey,
+                requestId: row.fal_request_id,
+                projectId: row.project_id,
+              });
+              output = { video_url: result.video_url, fal_seed: result.fal_seed };
+
+              try {
+                const projRow = await pool.query('SELECT brief FROM projects WHERE id = $1', [row.project_id]);
+                if (projRow.rows.length > 0) {
+                  const brief = typeof projRow.rows[0].brief === 'string'
+                    ? JSON.parse(projRow.rows[0].brief) : projRow.rows[0].brief;
+                  await pool.query(
+                    `UPDATE projects SET brief = $1, result_url = $2, status = 'ready' WHERE id = $3`,
+                    [JSON.stringify({ ...brief, video_url: result.video_url, seed: row.seed }), result.video_url, row.project_id],
+                  );
+                }
+              } catch (e) {
+                console.error(`[Reconciler] Job ${row.id}: project update failed:`, e.message);
+              }
             }
 
             await pool.query(
               `UPDATE generation_jobs SET status = 'done', progress = 100, output = $1, updated_at = NOW() WHERE id = $2`,
-              [JSON.stringify({ video_url: result.video_url, fal_seed: result.fal_seed }), row.id],
+              [JSON.stringify(output), row.id],
             );
             console.log(`[Reconciler] Job ${row.id}: finalized (COMPLETED)`);
           } catch (uploadErr) {
             console.error(`[Reconciler] Job ${row.id}: S3 upload failed, will retry:`, uploadErr.message);
-            // Don't fail the job — fal video URL is available for a while, retry next cycle
           }
         } else if (status.status === 'FAILED') {
           await failJob(row.id, row.user_id, row.cost_credits, `fal FAILED: ${status.error || 'unknown'}`, true);
           console.log(`[Reconciler] Job ${row.id}: failed at fal`);
         }
-        // IN_QUEUE / IN_PROGRESS — just wait, last_polled_at is updated
       } catch (err) {
         const msg = err.message || String(err);
         console.error(`[Reconciler] Error processing job ${row.id}:`, msg);
-        // 404 / "Not Found" = request_id doesn't exist at fal, not transient
         if (msg.includes('Not Found') || msg.includes('404')) {
           await failJob(row.id, row.user_id, row.cost_credits, `fal request not found: ${msg}`, true);
           console.log(`[Reconciler] Job ${row.id}: marked failed (request not found)`);

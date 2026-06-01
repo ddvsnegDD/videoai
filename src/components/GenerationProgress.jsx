@@ -1,8 +1,10 @@
 import { Check, AlertCircle, Loader2 } from 'lucide-react';
 import { C } from '../lib/theme.js';
 
-export default function GenerationProgress({ job }) {
+export default function GenerationProgress({ job, type }) {
   if (!job) return null;
+
+  const isImage = type === 'image';
 
   if (job.status === 'done') {
     return (
@@ -36,7 +38,11 @@ export default function GenerationProgress({ job }) {
         style={{ animation: 'spin 0.7s linear infinite', marginBottom: 16 }}
       />
       <p style={{ color: C.dark, fontWeight: 600, fontSize: '0.9375rem', marginBottom: 4 }}>
-        {job.status === 'pending' ? 'В очереди...' : 'Оживляю товар...'}
+        {job.status === 'pending'
+          ? 'В очереди...'
+          : isImage
+            ? 'Генерирую картинку...'
+            : 'Оживляю товар...'}
       </p>
       <div style={{ width: '100%', maxWidth: 280 }}>
         <div style={{ height: 6, borderRadius: 3, background: C.gray100, overflow: 'hidden' }}>
@@ -51,7 +57,7 @@ export default function GenerationProgress({ job }) {
         <p style={{ color: C.gray400, fontSize: '0.75rem', textAlign: 'center', marginTop: 6 }}>{progress}%</p>
       </div>
       <p style={{ color: C.gray400, fontSize: '0.8125rem', marginTop: 8 }}>
-        Генерация видео... обычно 1-3 минуты
+        {isImage ? 'Обычно 15-30 секунд' : 'Генерация видео... обычно 1-3 минуты'}
       </p>
     </div>
   );

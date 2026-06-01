@@ -2,11 +2,6 @@ import { randomUUID } from 'crypto';
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import { Agent, fetch as undiciFetch } from 'undici';
-import { buildScenarioPrompt, TONES } from '../prompts/scenario.js';
-import { parseSingleScenario } from '../lib/scenarioParser.js';
-
-export const CREDITS_COST = 3;
-export const CREDITS_PER_SCENARIO = 1;
 
 const OAUTH_URL = 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth';
 const CHAT_URL = 'https://gigachat.devices.sberbank.ru/api/v1/chat/completions';
@@ -28,8 +23,7 @@ function createDispatcher() {
     return new Agent({ connect: { ca, rejectUnauthorized: true } });
   }
 
-  // TODO: add real Russian CA certs for production
-  console.warn('⚠️ SSL verification disabled for GigaChat — fix before production');
+  console.warn('[GigaChat] SSL certs not found — verification disabled');
   return new Agent({ connect: { rejectUnauthorized: false } });
 }
 
@@ -43,6 +37,13 @@ async function fetchGC(url, options) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+function makeError(code, message) {
+  const err = new Error(message);
+  err.code = code;
+  err.retryable = code !== 'AUTH_ERROR';
+  return err;
 }
 
 async function getToken() {
@@ -77,7 +78,7 @@ async function getToken() {
   return cachedToken;
 }
 
-async function chatCompletion(messages) {
+async function chatCompletion(messages, { temperature = 0.9, maxTokens = 2048 } = {}) {
   const token = await getToken();
 
   const res = await fetchGC(CHAT_URL, {
@@ -91,8 +92,8 @@ async function chatCompletion(messages) {
     body: JSON.stringify({
       model: MODEL,
       messages,
-      temperature: 0.9,
-      max_tokens: 2048,
+      temperature,
+      max_tokens: maxTokens,
     }),
   });
 
@@ -118,66 +119,36 @@ async function chatCompletion(messages) {
   return content;
 }
 
-function makeError(code, message) {
-  const err = new Error(message);
-  err.code = code;
-  err.retryable = code !== 'AUTH_ERROR';
-  return err;
-}
+// ── Sprint B: build image prompt from Russian product description ──
 
-async function generateOne({ topic, style, duration, tone }) {
-  const messages = buildScenarioPrompt({ topic, style, duration, tone });
-  const rawText = await chatCompletion(messages);
-  const parsed = parseSingleScenario(rawText);
+const IMAGE_PROMPT_SYSTEM = `You are a professional product photographer and AI image prompt engineer.
+The user describes a product in Russian. Your job:
+1. Create a DETAILED prompt IN ENGLISH for an AI image generator (Nano Banana / Flux).
+2. The prompt must describe: the product itself, background/surface, camera angle, lighting, style.
+3. Style: premium commercial product photography, clean minimalist background, soft studio lighting.
+4. Keep text/logos on packaging readable — mention "sharp readable text on label" in the prompt.
+5. Output ONLY the English prompt, no explanations, no markdown, no quotes.`;
 
-  if (!parsed.ok) {
-    console.error(`LLM parse fail [${tone.key}]:`, rawText.substring(0, 300));
-    throw makeError('PARSE_ERROR', `Failed to parse ${tone.label} scenario`);
-  }
+export async function buildImagePrompt({ productType, details, style }) {
+  if (!productType) throw makeError('INVALID_INPUT', 'productType is required');
 
-  // Ensure tone label is set from context if model didn't return it
-  if (!parsed.scenario.tone) {
-    parsed.scenario.tone = tone.label;
-  }
+  const userMsg = [
+    `Товар: ${productType}`,
+    details ? `Детали: ${details}` : '',
+    style ? `Стиль: ${style}` : '',
+  ].filter(Boolean).join('\n');
 
-  return parsed.scenario;
-}
+  console.log(`[GigaChat] buildImagePrompt input: ${userMsg}`);
 
-export async function generateScenarios({ topic, style, duration }) {
-  // Sequential requests — GigaChat PERS rate-limits parallel calls
-  const scenarios = [];
-  let failed = 0;
+  const prompt = await chatCompletion([
+    { role: 'system', content: IMAGE_PROMPT_SYSTEM },
+    { role: 'user', content: userMsg },
+  ], { temperature: 0.7, maxTokens: 512 });
 
-  for (const tone of TONES) {
-    try {
-      const scenario = await generateOne({ topic, style, duration, tone });
-      scenarios.push(scenario);
-    } catch (err) {
-      failed++;
-      console.warn(`Scenario [${tone.key}] failed:`, err.message);
-    }
-  }
+  const cleaned = prompt.replace(/^["'`]+|["'`]+$/g, '').trim();
+  console.log(`[GigaChat] buildImagePrompt result: ${cleaned.slice(0, 200)}`);
 
-  const succeeded = scenarios.length;
-
-  if (succeeded === 0) {
-    throw makeError('PROVIDER_ERROR', 'All 3 scenarios failed');
-  }
-
-  if (succeeded < 3) {
-    console.warn(`Partial success: ${succeeded}/3 scenarios generated`);
-  }
-
-  return {
-    ok: true,
-    data: { scenarios, succeeded, failed },
-    succeeded,
-    failed,
-  };
-}
-
-export async function generateIdeas({ niche, count = 5 }) {
-  throw makeError('PROVIDER_ERROR', 'generateIdeas not implemented yet');
+  return { prompt: cleaned };
 }
 
 export async function listModels() {
