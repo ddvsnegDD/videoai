@@ -7,7 +7,19 @@ import { sendCode, verifyCode, requireAuth, getMe } from './server/auth.js';
 import { createJob, getJob, listJobs, runWatchdog, startReconciler } from './server/jobs.js';
 import { VIDEO_MODELS, MOTION_PRESETS } from './server/providers/falVideo.js';
 import { IMAGE_MODEL } from './server/providers/falImage.js';
-import { uploadBuffer } from './server/storage.js';
+import { uploadBuffer, deleteByPrefix } from './server/storage.js';
+
+const S3_BUCKET = process.env.S3_BUCKET || 'videoai-media';
+
+function extractS3Key(url) {
+  if (!url || typeof url !== 'string') return null;
+  const prefix = `https://${S3_BUCKET}.storage.yandexcloud.net/`;
+  if (url.startsWith(prefix)) return url.slice(prefix.length);
+  // Fallback: path-style URL
+  const pathPrefix = `https://storage.yandexcloud.net/${S3_BUCKET}/`;
+  if (url.startsWith(pathPrefix)) return url.slice(pathPrefix.length);
+  return null;
+}
 
 const app = express();
 const DIST = resolve('dist');
@@ -195,6 +207,54 @@ app.patch('/api/projects/:id', requireAuth, async (req, res) => {
     res.json({ project: result.rows[0] });
   } catch (err) {
     console.error('patch project error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.delete('/api/projects/:id', requireAuth, async (req, res) => {
+  try {
+    // 1. Check ownership
+    const projResult = await pool.query(
+      `SELECT * FROM projects WHERE id = $1`,
+      [req.params.id],
+    );
+    if (projResult.rows.length === 0) return res.status(404).json({ error: 'not_found' });
+    const project = projResult.rows[0];
+    if (project.user_id !== req.userId) return res.status(403).json({ error: 'forbidden' });
+
+    // 2. Block if active generation
+    const activeJobs = await pool.query(
+      `SELECT id FROM generation_jobs
+       WHERE project_id = $1 AND status IN ('pending','running')
+       LIMIT 1`,
+      [project.id],
+    );
+    if (activeJobs.rows.length > 0) {
+      return res.status(409).json({ error: 'active_generation', message: 'Дождитесь завершения генерации' });
+    }
+
+    // 3. Delete S3 files (best-effort)
+    try {
+      // Delete all files under projects/{id}/ prefix (videos, generated images)
+      await deleteByPrefix(`projects/${project.id}/`);
+
+      // Delete the source image from uploads (if exists)
+      const brief = typeof project.brief === 'string' ? JSON.parse(project.brief) : project.brief;
+      const sourceUrl = brief?.image_url;
+      if (sourceUrl) {
+        const key = extractS3Key(sourceUrl);
+        if (key) await deleteByPrefix(key);
+      }
+    } catch (s3Err) {
+      console.error(`Delete project ${project.id}: S3 cleanup failed (non-blocking):`, s3Err.message);
+    }
+
+    // 4. Delete from DB (FK CASCADE removes generation_jobs)
+    await pool.query('DELETE FROM projects WHERE id = $1', [project.id]);
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('delete project error:', err);
     res.status(500).json({ error: 'server_error' });
   }
 });

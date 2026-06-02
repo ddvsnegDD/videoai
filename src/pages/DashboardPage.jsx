@@ -11,6 +11,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     api.get('/projects')
@@ -18,6 +19,21 @@ export default function DashboardPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleDelete(projectId) {
+    setDeleteError('');
+    try {
+      await api.del(`/projects/${projectId}`);
+      setProjects(prev => prev.filter(p => p.id !== projectId));
+    } catch (err) {
+      if (err.status === 409) {
+        setDeleteError('Дождитесь завершения генерации');
+      } else {
+        setDeleteError('Ошибка удаления');
+      }
+      setTimeout(() => setDeleteError(''), 4000);
+    }
+  }
 
   return (
     <div style={{ paddingTop: 96, paddingBottom: 80, minHeight: '100vh', background: C.bg }}>
@@ -53,6 +69,12 @@ export default function DashboardPage() {
           <StatCard icon={<CreditCard size={20} color={C.gray500} />} label="Тариф" value="Бесплатный" link="/billing" />
         </div>
 
+        {deleteError && (
+          <p style={{ color: '#EF4444', fontSize: '0.8125rem', textAlign: 'center', marginBottom: 16, fontWeight: 500 }}>
+            {deleteError}
+          </p>
+        )}
+
         {/* Projects */}
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
@@ -64,7 +86,7 @@ export default function DashboardPage() {
             gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
             gap: 20,
           }}>
-            {projects.map(p => <ProjectCard key={p.id} project={p} />)}
+            {projects.map(p => <ProjectCard key={p.id} project={p} onDelete={handleDelete} />)}
           </div>
         ) : (
           <div style={{

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Download, RefreshCw, Film, Clock, Play } from 'lucide-react';
+import { ArrowLeft, Download, RefreshCw, Film, Clock, Play, Trash2 } from 'lucide-react';
 import { C } from '../lib/theme.js';
 import { api } from '../lib/api.js';
 import Btn from '../components/Btn.jsx';
@@ -10,6 +10,27 @@ export default function ProjectPage() {
   const navigate = useNavigate();
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  async function handleDelete() {
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await api.del(`/projects/${id}`);
+      navigate('/dashboard', { replace: true });
+    } catch (err) {
+      if (err.status === 409) {
+        setDeleteError('Дождитесь завершения генерации');
+      } else {
+        setDeleteError('Ошибка удаления');
+      }
+      setConfirmDelete(false);
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   useEffect(() => {
     api.get(`/projects/${id}`)
@@ -87,6 +108,52 @@ export default function ProjectPage() {
             </Link>
           </div>
         )}
+
+        {/* Delete section */}
+        <div style={{ marginTop: 32, textAlign: 'center' }}>
+          {deleteError && (
+            <p style={{ color: '#EF4444', fontSize: '0.8125rem', marginBottom: 12 }}>{deleteError}</p>
+          )}
+          {confirmDelete ? (
+            <div style={{
+              background: C.white, border: '1px solid #FECACA', borderRadius: 14, padding: 20,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+            }}>
+              <p style={{ fontSize: '0.875rem', color: C.dark, fontWeight: 500 }}>
+                Удалить креатив? Видео и файлы удалятся безвозвратно.
+              </p>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <Btn variant="outline" size="sm" disabled={deleting} onClick={() => setConfirmDelete(false)}>
+                  Отмена
+                </Btn>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  style={{
+                    padding: '8px 20px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                    background: '#EF4444', color: '#fff', fontSize: '0.8125rem', fontWeight: 600,
+                    opacity: deleting ? 0.5 : 1,
+                  }}
+                >
+                  {deleting ? 'Удаление...' : 'Да, удалить'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: C.gray400, fontSize: '0.75rem', display: 'inline-flex',
+                alignItems: 'center', gap: 4, transition: 'color 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = '#EF4444'}
+              onMouseLeave={e => e.currentTarget.style.color = C.gray400}
+            >
+              <Trash2 size={12} /> Удалить проект
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
