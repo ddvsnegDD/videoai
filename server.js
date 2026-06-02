@@ -355,6 +355,94 @@ app.get('/api/admin/jobs', requireAdmin, async (_req, res) => {
   }
 });
 
+// ── Payments ──
+
+// POST /api/payments/create — returns Quickpay URL
+app.post('/api/payments/create', requireAuth, async (req, res) => {
+  try {
+    const { packageId, paymentType } = req.body;
+    if (!packageId) return res.status(400).json({ error: 'missing_package_id' });
+
+    const { getPackageById } = await import('./src/data/tariffs.js');
+    const pkg = getPackageById(packageId);
+    if (!pkg) return res.status(400).json({ error: 'invalid_package' });
+
+    const wallet = process.env.YOOMONEY_WALLET;
+    if (!wallet) return res.status(503).json({ error: 'payments_not_configured' });
+
+    const { randomUUID } = await import('crypto');
+    const label = `${req.userId}:${pkg.id}:${randomUUID().slice(0, 8)}`;
+
+    const { createPendingPayment, buildQuickpayUrl } = await import('./server/payments.js');
+    await createPendingPayment({ userId: req.userId, pkg, label });
+
+    const successUrl = `${process.env.APP_URL || 'https://ddvideoai.ru'}/billing?paid=1`;
+    const url = buildQuickpayUrl({ wallet, pkg, label, successUrl, paymentType: paymentType || 'AC' });
+
+    res.json({ url, label });
+  } catch (err) {
+    console.error('payments/create error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// GET /api/payments/history — user's own payment history
+app.get('/api/payments/history', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, package_id, label, expected_amount, paid_amount,
+              credits_granted, status, created_at, completed_at
+       FROM payments WHERE user_id = $1
+       ORDER BY created_at DESC LIMIT 50`,
+      [req.userId],
+    );
+    res.json({ payments: result.rows });
+  } catch (err) {
+    console.error('payments/history error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// POST /api/payments/yoomoney-webhook — YooMoney HTTP-notification
+// Must use urlencoded parser (not JSON)
+app.post(
+  '/api/payments/yoomoney-webhook',
+  express.urlencoded({ extended: false }),
+  async (req, res) => {
+    try {
+      const secret = process.env.YOOMONEY_NOTIFICATION_SECRET;
+      if (!secret) {
+        console.error('[YooMoney] YOOMONEY_NOTIFICATION_SECRET not set');
+        return res.sendStatus(200); // always 200 to ЮMoney
+      }
+
+      const { processYooMoneyWebhook } = await import('./server/payments.js');
+      const result = await processYooMoneyWebhook({ params: req.body, secret });
+      console.log(`[YooMoney] Webhook result: ${result.reason}`);
+      res.sendStatus(200);
+    } catch (err) {
+      console.error('[YooMoney] Webhook handler error:', err);
+      res.sendStatus(200); // always 200
+    }
+  },
+);
+
+// ── Admin: payments ──
+app.get('/api/admin/payments', requireAdmin, async (_req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT p.id, u.email AS user_email, p.package_id, p.expected_amount, p.paid_amount,
+             p.credits_granted, p.status, p.operation_id, p.created_at, p.completed_at
+      FROM payments p LEFT JOIN users u ON u.id = p.user_id
+      ORDER BY p.created_at DESC LIMIT 100
+    `);
+    res.json({ payments: result.rows });
+  } catch (err) {
+    console.error('admin payments error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
 // ── Static + SPA ──
 app.use(express.static(DIST));
 app.get('/{*splat}', (_req, res) => { res.sendFile(join(DIST, 'index.html')); });

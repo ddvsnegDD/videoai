@@ -64,6 +64,28 @@ export async function initDB() {
     ALTER TABLE generation_jobs ADD COLUMN IF NOT EXISTS last_polled_at TIMESTAMPTZ;
     ALTER TABLE generation_jobs ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
     ALTER TABLE generation_jobs ADD COLUMN IF NOT EXISTS refunded BOOLEAN DEFAULT FALSE;
+
+    -- Sprint 6: payments
+    CREATE TABLE IF NOT EXISTS payments (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id),
+      package_id TEXT,
+      label TEXT,
+      expected_amount NUMERIC,
+      paid_amount NUMERIC,
+      operation_id TEXT,
+      credits_granted INTEGER,
+      status TEXT DEFAULT 'pending',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      completed_at TIMESTAMPTZ
+    );
+    ALTER TABLE payments ADD COLUMN IF NOT EXISTS package_id TEXT;
+    ALTER TABLE payments ADD COLUMN IF NOT EXISTS label TEXT;
+    ALTER TABLE payments ADD COLUMN IF NOT EXISTS expected_amount NUMERIC;
+    ALTER TABLE payments ADD COLUMN IF NOT EXISTS paid_amount NUMERIC;
+    ALTER TABLE payments ADD COLUMN IF NOT EXISTS operation_id TEXT;
+    ALTER TABLE payments ADD COLUMN IF NOT EXISTS credits_granted INTEGER;
+    ALTER TABLE payments ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
   `);
 
   // Partial unique index for dedup (only active jobs)
@@ -71,7 +93,14 @@ export async function initDB() {
     CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_job
     ON generation_jobs (idempotency_key)
     WHERE status IN ('pending','running') AND idempotency_key IS NOT NULL
-  `).catch(() => {}); // ignore if already exists
+  `).catch(() => {});
+
+  // Unique index on operation_id to prevent double-crediting
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_operation_id
+    ON payments (operation_id)
+    WHERE operation_id IS NOT NULL
+  `).catch(() => {});
 
   console.log('DB tables ready');
 }
