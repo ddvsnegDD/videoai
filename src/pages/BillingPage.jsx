@@ -7,10 +7,26 @@ import { useAuth } from '../lib/auth.jsx';
 import { PACKAGES } from '../data/tariffs.js';
 import Btn from '../components/Btn.jsx';
 
-const KIND_LABELS = {
-  economy: { label: 'Эконом (Kling)', icon: Zap, color: C.primary },
-  premium: { label: 'Премиум (Veo)', icon: Crown, color: '#8B5CF6' },
-};
+const TABS = [
+  {
+    key: 'economy',
+    label: 'Эконом (Kling)',
+    icon: Zap,
+    accentColor: C.primary,
+    lightColor: C.primaryLight,
+    darkColor: C.primaryDark,
+    hint: 'Быстро и доступно — для массовых креативов',
+  },
+  {
+    key: 'premium',
+    label: 'Премиум (Veo)',
+    icon: Crown,
+    accentColor: '#8B5CF6',
+    lightColor: '#EDE9FE',
+    darkColor: '#6D28D9',
+    hint: 'Кинематографичное качество',
+  },
+];
 
 const STATUS_MAP = {
   pending: { label: 'Ожидает', icon: Clock, color: C.gray400 },
@@ -18,18 +34,17 @@ const STATUS_MAP = {
   mismatch: { label: 'Ошибка суммы', icon: AlertCircle, color: C.danger },
 };
 
-const economyPackages = PACKAGES.filter(p => p.kind === 'economy');
-const premiumPackages = PACKAGES.filter(p => p.kind === 'premium');
-
 export default function BillingPage() {
   const { user, refresh } = useAuth();
-  const [searchParams] = useSearchParams();
-  const [buying, setBuying] = useState(null); // packageId being purchased
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [buying, setBuying] = useState(null);
   const [error, setError] = useState('');
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(true);
 
   const justPaid = searchParams.get('paid') === '1';
+  const kindParam = searchParams.get('kind');
+  const activeTab = TABS.find(t => t.key === kindParam) ? kindParam : 'economy';
 
   useEffect(() => {
     if (justPaid) refresh();
@@ -38,6 +53,15 @@ export default function BillingPage() {
       .catch(() => {})
       .finally(() => setHistoryLoading(false));
   }, []);
+
+  function switchTab(key) {
+    setError('');
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('kind', key);
+      return next;
+    });
+  }
 
   async function handleBuy(pkg) {
     if (buying) return;
@@ -54,9 +78,12 @@ export default function BillingPage() {
     }
   }
 
+  const tab = TABS.find(t => t.key === activeTab);
+  const visiblePackages = PACKAGES.filter(p => p.kind === activeTab);
+
   return (
     <div style={{ paddingTop: 96, paddingBottom: 80, minHeight: '100vh', background: C.bg }}>
-      <div className="container" style={{ maxWidth: 800 }}>
+      <div className="container" style={{ maxWidth: 760 }}>
 
         {/* Paid success banner */}
         {justPaid && (
@@ -77,14 +104,47 @@ export default function BillingPage() {
           </div>
         )}
 
+        {/* Header */}
         <h1 style={{ fontFamily: "'Manrope', sans-serif", fontSize: '1.75rem', fontWeight: 700, color: C.dark, marginBottom: 4 }}>
           Пополнить кредиты
         </h1>
         <p style={{ color: C.gray500, fontSize: '0.9375rem', marginBottom: 8 }}>
           Баланс: <strong style={{ color: C.primary }}>{user?.credits ?? 0} кр.</strong>
         </p>
-        <p style={{ color: C.gray400, fontSize: '0.8125rem', marginBottom: 32 }}>
+        <p style={{ color: C.gray400, fontSize: '0.8125rem', marginBottom: 28 }}>
           1 эконом-ролик = 40 кр. · 1 премиум-ролик = 90 кр. · 1 картинка = 13 кр.
+        </p>
+
+        {/* Tabs */}
+        <div style={{
+          display: 'flex', gap: 8, marginBottom: 28,
+          background: C.gray100, borderRadius: 14, padding: 4,
+        }}>
+          {TABS.map(t => {
+            const Icon = t.icon;
+            const active = activeTab === t.key;
+            return (
+              <button key={t.key} onClick={() => switchTab(t.key)}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  gap: 8, padding: '10px 16px', borderRadius: 10, border: 'none',
+                  cursor: 'pointer', transition: 'all 0.18s',
+                  background: active ? C.white : 'transparent',
+                  color: active ? (t.key === 'economy' ? C.primaryDark : '#6D28D9') : C.gray500,
+                  fontWeight: 600, fontSize: '0.9rem',
+                  boxShadow: active ? C.shadowSm : 'none',
+                }}
+              >
+                <Icon size={16} color={active ? t.accentColor : C.gray400} />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Tab hint */}
+        <p style={{ color: C.gray400, fontSize: '0.8125rem', marginBottom: 20 }}>
+          {tab.hint}
         </p>
 
         {error && (
@@ -93,32 +153,23 @@ export default function BillingPage() {
           </p>
         )}
 
-        {/* Economy packages */}
-        <PackageSection
-          title="Эконом (Kling)"
-          icon={<Zap size={18} color={C.primary} />}
-          packages={economyPackages}
-          buying={buying}
-          onBuy={handleBuy}
-          accentColor={C.primary}
-          lightColor={C.primaryLight}
-          darkColor={C.primaryDark}
-        />
-
-        {/* Premium packages */}
-        <PackageSection
-          title="Премиум (Veo)"
-          icon={<Crown size={18} color="#8B5CF6" />}
-          packages={premiumPackages}
-          buying={buying}
-          onBuy={handleBuy}
-          accentColor="#8B5CF6"
-          lightColor="#EDE9FE"
-          darkColor="#6D28D9"
-        />
+        {/* Packages grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, marginBottom: 48 }}>
+          {visiblePackages.map(pkg => (
+            <PackageCard
+              key={pkg.id}
+              pkg={pkg}
+              buying={buying}
+              onBuy={handleBuy}
+              accentColor={tab.accentColor}
+              lightColor={tab.lightColor}
+              darkColor={tab.darkColor}
+            />
+          ))}
+        </div>
 
         {/* Payment history */}
-        <section style={{ marginTop: 48 }}>
+        <section>
           <h2 style={{ fontFamily: "'Manrope', sans-serif", fontSize: '1.125rem', fontWeight: 700, color: C.dark, marginBottom: 16 }}>
             История платежей
           </h2>
@@ -133,39 +184,12 @@ export default function BillingPage() {
           )}
         </section>
 
-        {/* Disclaimer */}
         <p style={{ color: C.gray300, fontSize: '0.75rem', marginTop: 40, lineHeight: 1.5 }}>
           Оплата через ЮMoney. Кредиты начисляются автоматически после подтверждения платежа.
           Не является публичной офертой.
         </p>
       </div>
     </div>
-  );
-}
-
-function PackageSection({ title, icon, packages, buying, onBuy, accentColor, lightColor, darkColor }) {
-  return (
-    <section style={{ marginBottom: 32 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        {icon}
-        <h2 style={{ fontFamily: "'Manrope', sans-serif", fontSize: '1.0625rem', fontWeight: 700, color: C.dark }}>
-          {title}
-        </h2>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
-        {packages.map(pkg => (
-          <PackageCard
-            key={pkg.id}
-            pkg={pkg}
-            buying={buying}
-            onBuy={onBuy}
-            accentColor={accentColor}
-            lightColor={lightColor}
-            darkColor={darkColor}
-          />
-        ))}
-      </div>
-    </section>
   );
 }
 
@@ -177,13 +201,9 @@ function PackageCard({ pkg, buying, onBuy, accentColor, lightColor, darkColor })
     <div style={{
       background: C.white,
       border: `1.5px solid ${pkg.popular ? accentColor : C.gray200}`,
-      borderRadius: 16,
-      padding: 20,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 12,
-      position: 'relative',
-      transition: 'box-shadow 0.2s',
+      borderRadius: 16, padding: 20,
+      display: 'flex', flexDirection: 'column', gap: 12,
+      position: 'relative', transition: 'box-shadow 0.2s',
     }}>
       {pkg.popular && (
         <div style={{
@@ -211,8 +231,7 @@ function PackageCard({ pkg, buying, onBuy, accentColor, lightColor, darkColor })
         </p>
       </div>
       <Btn
-        variant="primary"
-        size="sm"
+        variant="primary" size="sm"
         disabled={anyBuying}
         onClick={() => onBuy(pkg)}
         style={{
@@ -239,8 +258,7 @@ function PaymentRow({ payment }) {
   return (
     <div style={{
       background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 12,
-      padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 16,
-      flexWrap: 'wrap',
+      padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
     }}>
       <StatusIcon size={16} color={statusInfo.color} style={{ flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 120 }}>

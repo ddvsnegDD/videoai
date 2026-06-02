@@ -80,6 +80,7 @@ export const tariffs = [
   {
     id: 'economy_5',
     name: 'Эконом',
+    kind: 'economy',
     price: 890,
     credits: 200,
     description: 'Для регулярной работы с контентом',
@@ -95,6 +96,7 @@ export const tariffs = [
   {
     id: 'premium_5',
     name: 'Премиум',
+    kind: 'premium',
     price: 2490,
     credits: 450,
     description: 'Кинематографичное качество',
