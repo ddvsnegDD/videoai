@@ -59,5 +59,52 @@ export function getPackageById(id) {
   return PACKAGES.find(p => p.id === id) || null;
 }
 
-// Legacy export kept for backward compat (BillingPage used `tariffs`)
-export const tariffs = PACKAGES;
+// Legacy export used by HomePage landing — keeps marketing card structure
+// (name, features, limits, popular, description)
+export const tariffs = [
+  {
+    id: 'free',
+    name: 'Пробный',
+    price: 0,
+    credits: 0,
+    description: '1 бесплатный Kling + 1 Veo на старте',
+    features: [
+      '1 эконом-ролик (Kling) бесплатно',
+      '1 премиум-ролик (Veo) бесплатно',
+      'Скачивание MP4',
+      'Все пресеты движения',
+    ],
+    limits: ['Без автопополнения'],
+    popular: false,
+  },
+  {
+    id: 'economy_5',
+    name: 'Эконом',
+    price: 890,
+    credits: 200,
+    description: 'Для регулярной работы с контентом',
+    features: [
+      '5 эконом-роликов (Kling)',
+      'Скачивание MP4',
+      'Все пресеты движения',
+      'Генерация картинки по тексту',
+    ],
+    limits: [],
+    popular: true,
+  },
+  {
+    id: 'premium_5',
+    name: 'Премиум',
+    price: 2490,
+    credits: 450,
+    description: 'Кинематографичное качество',
+    features: [
+      '5 премиум-роликов (Veo)',
+      'Максимальное качество движения',
+      'Скачивание MP4',
+      'Все возможности Эконома',
+    ],
+    limits: [],
+    popular: false,
+  },
+];
