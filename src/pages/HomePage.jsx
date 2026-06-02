@@ -989,7 +989,7 @@ function Pricing() {
                   ))}
                 </ul>
 
-                <Link to="/login" style={{ width: '100%' }}>
+                <Link to={t.price === 0 ? '/login' : '/billing'} style={{ width: '100%' }}>
                   <Btn
                     variant={t.popular ? 'primary' : 'outline'}
                     size="lg"
