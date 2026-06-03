@@ -1,32 +1,12 @@
+// src/pages/BillingPage.jsx
+// Sprint C merge: новые 3 пакета + реальная оплата через ЮMoney
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Zap, Crown, CheckCircle, Clock, AlertCircle } from 'lucide-react';
-import { C } from '../lib/theme.js';
-import { api } from '../lib/api.js';
-import { useAuth } from '../lib/auth.jsx';
-import { PACKAGES } from '../data/tariffs.js';
-import Btn from '../components/Btn.jsx';
-
-const TABS = [
-  {
-    key: 'economy',
-    label: 'Эконом (Kling)',
-    icon: Zap,
-    accentColor: C.primary,
-    lightColor: C.primaryLight,
-    darkColor: C.primaryDark,
-    hint: 'Быстро и доступно — для массовых креативов',
-  },
-  {
-    key: 'premium',
-    label: 'Премиум (Veo)',
-    icon: Crown,
-    accentColor: '#8B5CF6',
-    lightColor: '#EDE9FE',
-    darkColor: '#6D28D9',
-    hint: 'Кинематографичное качество',
-  },
-];
+import { Check, CreditCard, ShieldCheck, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { C } from '../lib/theme';
+import { api } from '../lib/api';
+import { useAuth } from '../lib/auth';
+import { PACKAGES } from '../data/tariffs';
 
 const STATUS_MAP = {
   pending: { label: 'Ожидает', icon: Clock, color: C.gray400 },
@@ -36,15 +16,13 @@ const STATUS_MAP = {
 
 export default function BillingPage() {
   const { user, refresh } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const [buying, setBuying] = useState(null);
   const [error, setError] = useState('');
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(true);
 
   const justPaid = searchParams.get('paid') === '1';
-  const kindParam = searchParams.get('kind');
-  const activeTab = TABS.find(t => t.key === kindParam) ? kindParam : 'economy';
 
   useEffect(() => {
     if (justPaid) refresh();
@@ -53,15 +31,6 @@ export default function BillingPage() {
       .catch(() => {})
       .finally(() => setHistoryLoading(false));
   }, []);
-
-  function switchTab(key) {
-    setError('');
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-      next.set('kind', key);
-      return next;
-    });
-  }
 
   async function handleBuy(pkg) {
     if (buying) return;
@@ -78,12 +47,24 @@ export default function BillingPage() {
     }
   }
 
-  const tab = TABS.find(t => t.key === activeTab);
-  const visiblePackages = PACKAGES.filter(p => p.kind === activeTab);
+  const glassCard = (isPopular) => ({
+    background: 'rgba(255, 255, 255, 0.75)',
+    backdropFilter: 'blur(20px)',
+    border: isPopular ? `2px solid ${C.primary}` : '1px solid rgba(16, 185, 129, 0.12)',
+    borderRadius: 24,
+    padding: '32px 24px',
+    boxShadow: isPopular ? '0 20px 40px rgba(10, 46, 31, 0.06)' : '0 12px 24px rgba(10, 46, 31, 0.02)',
+    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    transition: 'transform 0.2s ease',
+    transform: isPopular ? 'scale(1.03)' : 'scale(1)',
+  });
 
   return (
-    <div style={{ paddingTop: 96, paddingBottom: 80, minHeight: '100vh', background: C.bg }}>
-      <div className="container" style={{ maxWidth: 760 }}>
+    <div style={{ background: 'linear-gradient(135deg, #EFF6F0 0%, #EBF3F5 50%, #F3EBF5 100%)', minHeight: 'calc(100vh - 70px)', padding: '60px 20px', boxSizing: 'border-box' }}>
+      <div style={{ maxWidth: 1140, margin: '0 auto' }}>
 
         {/* Paid success banner */}
         {justPaid && (
@@ -94,89 +75,112 @@ export default function BillingPage() {
           }}>
             <CheckCircle size={20} color={C.primary} style={{ flexShrink: 0 }} />
             <div>
-              <p style={{ fontWeight: 600, color: C.primaryDark, fontSize: '0.9375rem' }}>
-                Платёж принят
-              </p>
-              <p style={{ color: C.gray500, fontSize: '0.8125rem' }}>
-                Кредиты появятся в течение минуты — обновите страницу если не отображаются.
-              </p>
+              <p style={{ fontWeight: 600, color: C.primaryDark, fontSize: 15 }}>Платёж принят</p>
+              <p style={{ color: C.gray500, fontSize: 13 }}>Кредиты появятся в течение минуты — обновите страницу если не отображаются.</p>
             </div>
           </div>
         )}
 
         {/* Header */}
-        <h1 style={{ fontFamily: "'Manrope', sans-serif", fontSize: '1.75rem', fontWeight: 700, color: C.dark, marginBottom: 4 }}>
-          Пополнить кредиты
-        </h1>
-        <p style={{ color: C.gray500, fontSize: '0.9375rem', marginBottom: 8 }}>
-          Баланс: <strong style={{ color: C.primary }}>{user?.credits ?? 0} кр.</strong>
-        </p>
-        <p style={{ color: C.gray400, fontSize: '0.8125rem', marginBottom: 28 }}>
-          1 эконом-ролик = 40 кр. · 1 премиум-ролик = 90 кр. · 1 картинка = 13 кр.
-        </p>
-
-        {/* Tabs */}
-        <div style={{
-          display: 'flex', gap: 8, marginBottom: 28,
-          background: C.gray100, borderRadius: 14, padding: 4,
-        }}>
-          {TABS.map(t => {
-            const Icon = t.icon;
-            const active = activeTab === t.key;
-            return (
-              <button key={t.key} onClick={() => switchTab(t.key)}
-                style={{
-                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  gap: 8, padding: '10px 16px', borderRadius: 10, border: 'none',
-                  cursor: 'pointer', transition: 'all 0.18s',
-                  background: active ? C.white : 'transparent',
-                  color: active ? (t.key === 'economy' ? C.primaryDark : '#6D28D9') : C.gray500,
-                  fontWeight: 600, fontSize: '0.9rem',
-                  boxShadow: active ? C.shadowSm : 'none',
-                }}
-              >
-                <Icon size={16} color={active ? t.accentColor : C.gray400} />
-                {t.label}
-              </button>
-            );
-          })}
+        <div style={{ textAlign: 'center', marginBottom: 40 }}>
+          <h1 style={{ fontFamily: '"Manrope", sans-serif', fontSize: 36, fontWeight: 800, color: C.dark, marginBottom: 12 }}>
+            Выберите пакет видеокреативов
+          </h1>
+          <p style={{ fontSize: 16, color: C.gray600, maxWidth: 600, margin: '0 auto', lineHeight: 1.5 }}>
+            Покупайте готовые ролики для маркетплейсов. Оплата в рублях через ЮMoney, кредиты не сгорают и остаются на балансе навсегда.
+          </p>
+          <p style={{ color: C.gray400, fontSize: 14, marginTop: 8 }}>
+            Ваш баланс: <strong style={{ color: C.primary }}>{user?.credits ?? 0} кредитов</strong>
+          </p>
         </div>
 
-        {/* Tab hint */}
-        <p style={{ color: C.gray400, fontSize: '0.8125rem', marginBottom: 20 }}>
-          {tab.hint}
-        </p>
-
         {error && (
-          <p style={{ color: C.danger, fontSize: '0.875rem', marginBottom: 16, background: C.dangerLight, borderRadius: 10, padding: '10px 16px' }}>
+          <p style={{ color: C.danger, fontSize: 14, marginBottom: 16, background: '#FEE2E2', borderRadius: 10, padding: '10px 16px', textAlign: 'center' }}>
             {error}
           </p>
         )}
 
         {/* Packages grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, marginBottom: 48 }}>
-          {visiblePackages.map(pkg => (
-            <PackageCard
-              key={pkg.id}
-              pkg={pkg}
-              buying={buying}
-              onBuy={handleBuy}
-              accentColor={tab.accentColor}
-              lightColor={tab.lightColor}
-              darkColor={tab.darkColor}
-            />
-          ))}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 30, alignItems: 'stretch', marginBottom: 50, textAlign: 'left' }}>
+          {PACKAGES.map(pkg => {
+            const pop = !!pkg.popular;
+            const isLoading = buying === pkg.id;
+            const anyBuying = !!buying;
+
+            return (
+              <div key={pkg.id} style={glassCard(pop)}>
+                {pop && (
+                  <div style={{
+                    position: 'absolute', top: -12, right: 24,
+                    backgroundColor: C.primary, color: '#FFFFFF',
+                    padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700,
+                    boxShadow: '0 4px 10px rgba(16,185,129,0.2)',
+                  }}>ПОПУЛЯРНО</div>
+                )}
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: pop ? C.primaryDark : C.gray600, marginBottom: 8 }}>{pkg.title}</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
+                    <span style={{ fontSize: 36, fontWeight: 800, color: C.dark }}>{pkg.price.toLocaleString('ru-RU')} ₽</span>
+                  </div>
+                  <p style={{ fontSize: 12, color: C.primary, fontWeight: 600, marginBottom: 20 }}>
+                    {pkg.credits} кредитов
+                  </p>
+                  <p style={{ fontSize: 13, color: C.gray500, lineHeight: 1.4, marginBottom: 24 }}>{pkg.subtitle}</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, borderTop: `1px solid ${C.gray200}`, paddingTop: 20 }}>
+                    {pkg.feats.map((f, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 10, fontSize: 14, alignItems: 'center' }}>
+                        <Check size={16} style={{ color: C.primary, flexShrink: 0 }} />
+                        <span>{f}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  disabled={anyBuying}
+                  onClick={() => handleBuy(pkg)}
+                  style={{
+                    width: '100%',
+                    border: pop ? 'none' : `1px solid ${C.primary}`,
+                    color: pop ? '#FFFFFF' : C.primary,
+                    backgroundColor: pop ? C.primary : 'transparent',
+                    padding: 14, borderRadius: 12, fontSize: 15, fontWeight: 600,
+                    marginTop: 32, cursor: anyBuying ? 'default' : 'pointer',
+                    boxShadow: pop ? '0 8px 20px rgba(16,185,129,0.15)' : 'none',
+                    opacity: anyBuying ? 0.6 : 1,
+                  }}
+                >
+                  {isLoading ? 'Открываем оплату...' : (pop ? 'Оплатить пакет' : 'Купить пакет')}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Trust badges */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, maxWidth: 760, margin: '0 auto 50px', textAlign: 'left' }}>
+          <div style={{ display: 'flex', gap: 12, background: 'rgba(255,255,255,0.4)', padding: 16, borderRadius: 14, border: '1px solid rgba(0,0,0,0.03)' }}>
+            <CreditCard style={{ color: C.primary, flexShrink: 0 }} size={20} />
+            <div style={{ fontSize: 13, lineHeight: 1.4, color: C.gray600 }}>
+              <strong>Безопасная оплата ЮMoney.</strong> Все платежи шифруются. Мы не храним данные ваших банковских карт. Автоматическое выставление чеков.
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 12, background: 'rgba(255,255,255,0.4)', padding: 16, borderRadius: 14, border: '1px solid rgba(0,0,0,0.03)' }}>
+            <ShieldCheck style={{ color: C.primary, flexShrink: 0 }} size={20} />
+            <div style={{ fontSize: 13, lineHeight: 1.4, color: C.gray600 }}>
+              <strong>Кредиты не сгорают.</strong> Купленные кредиты остаются на вашем балансе без ограничения по времени.
+            </div>
+          </div>
         </div>
 
         {/* Payment history */}
-        <section>
-          <h2 style={{ fontFamily: "'Manrope', sans-serif", fontSize: '1.125rem', fontWeight: 700, color: C.dark, marginBottom: 16 }}>
+        <section style={{ maxWidth: 760, margin: '0 auto' }}>
+          <h2 style={{ fontFamily: '"Manrope", sans-serif', fontSize: 18, fontWeight: 700, color: C.dark, marginBottom: 16 }}>
             История платежей
           </h2>
           {historyLoading ? (
             <div className="spinner" style={{ margin: '24px auto' }} />
           ) : history.length === 0 ? (
-            <p style={{ color: C.gray400, fontSize: '0.875rem' }}>Платежей пока нет.</p>
+            <p style={{ color: C.gray400, fontSize: 14 }}>Платежей пока нет.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {history.map(p => <PaymentRow key={p.id} payment={p} />)}
@@ -184,67 +188,10 @@ export default function BillingPage() {
           )}
         </section>
 
-        <p style={{ color: C.gray300, fontSize: '0.75rem', marginTop: 40, lineHeight: 1.5 }}>
-          Оплата через ЮMoney. Кредиты начисляются автоматически после подтверждения платежа.
-          Не является публичной офертой.
+        <p style={{ color: C.gray300, fontSize: 12, marginTop: 40, lineHeight: 1.5, textAlign: 'center' }}>
+          Оплата через ЮMoney. Кредиты начисляются автоматически после подтверждения платежа. Не является публичной офертой.
         </p>
       </div>
-    </div>
-  );
-}
-
-function PackageCard({ pkg, buying, onBuy, accentColor, lightColor, darkColor }) {
-  const isLoading = buying === pkg.id;
-  const anyBuying = !!buying;
-
-  return (
-    <div style={{
-      background: C.white,
-      border: `1.5px solid ${pkg.popular ? accentColor : C.gray200}`,
-      borderRadius: 16, padding: 20,
-      display: 'flex', flexDirection: 'column', gap: 12,
-      position: 'relative', transition: 'box-shadow 0.2s',
-    }}>
-      {pkg.popular && (
-        <div style={{
-          position: 'absolute', top: -1, right: 16,
-          background: accentColor, color: '#fff',
-          fontSize: '0.6875rem', fontWeight: 700,
-          padding: '3px 10px', borderRadius: '0 0 8px 8px',
-          letterSpacing: '0.04em',
-        }}>
-          ВЫГОДНО
-        </div>
-      )}
-      <div>
-        <p style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 700, fontSize: '0.9375rem', color: C.dark }}>
-          {pkg.title}
-        </p>
-        <p style={{ color: C.gray400, fontSize: '0.75rem', marginTop: 2 }}>{pkg.subtitle}</p>
-      </div>
-      <div>
-        <span style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 800, fontSize: '1.375rem', color: C.dark }}>
-          {pkg.price} ₽
-        </span>
-        <p style={{ color: accentColor, fontSize: '0.75rem', fontWeight: 600, marginTop: 2 }}>
-          {pkg.credits} кредитов
-        </p>
-      </div>
-      <Btn
-        variant="primary" size="sm"
-        disabled={anyBuying}
-        onClick={() => onBuy(pkg)}
-        style={{
-          background: isLoading ? C.gray200 : `linear-gradient(135deg, ${accentColor}, ${darkColor})`,
-          border: 'none',
-        }}
-      >
-        {isLoading ? (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Открываем...
-          </span>
-        ) : 'Купить'}
-      </Btn>
     </div>
   );
 }
@@ -257,27 +204,27 @@ function PaymentRow({ payment }) {
 
   return (
     <div style={{
-      background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 12,
+      background: '#fff', border: `1px solid ${C.gray200}`, borderRadius: 12,
       padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
     }}>
       <StatusIcon size={16} color={statusInfo.color} style={{ flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 120 }}>
-        <p style={{ fontSize: '0.875rem', fontWeight: 600, color: C.dark }}>
+        <p style={{ fontSize: 14, fontWeight: 600, color: C.dark }}>
           {pkg?.title || payment.package_id}
         </p>
-        <p style={{ color: C.gray400, fontSize: '0.75rem' }}>{date}</p>
+        <p style={{ color: C.gray400, fontSize: 12 }}>{date}</p>
       </div>
       <div style={{ textAlign: 'right' }}>
-        <p style={{ fontSize: '0.875rem', fontWeight: 700, color: C.dark }}>
+        <p style={{ fontSize: 14, fontWeight: 700, color: C.dark }}>
           {payment.paid_amount ?? payment.expected_amount} ₽
         </p>
         {payment.credits_granted && (
-          <p style={{ color: C.primary, fontSize: '0.75rem', fontWeight: 600 }}>
+          <p style={{ color: C.primary, fontSize: 12, fontWeight: 600 }}>
             +{payment.credits_granted} кр.
           </p>
         )}
       </div>
-      <span style={{ fontSize: '0.6875rem', padding: '2px 8px', borderRadius: 6, background: `${statusInfo.color}20`, color: statusInfo.color, fontWeight: 600 }}>
+      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: `${statusInfo.color}20`, color: statusInfo.color, fontWeight: 600 }}>
         {statusInfo.label}
       </span>
     </div>

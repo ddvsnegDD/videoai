@@ -5,7 +5,6 @@ import {
   Zap, Play, Check, Plus, Clock, Type, Globe, AlertTriangle, Sparkles,
 } from 'lucide-react';
 import { C } from '../lib/theme';
-import { PACKAGES } from '../data/tariffs';
 
 /**
  * Публичный лендинг VideoAI (B2B-движок видеокреативов для маркетплейсов).
@@ -306,35 +305,37 @@ function Economics() {
 
 /* ============================ Тарифы ============================ */
 function Pricing() {
+  const plans = [
+    { name: 'Hook Pack', sub: 'Тест воронки и CTR', price: '599', feats: ['100 роликов (Kling 2.5)', 'Генерация картинок Nano Banana 2', 'Выгрузка MP4'], cta: 'Купить пакет', pop: false },
+    { name: 'Seller', sub: 'Для широкой линейки SKU', price: '1 599', feats: ['300 роликов (Kling 2.5)', '+ 5 премиум-креативов (Veo 3.1)', 'Приоритетная очередь рендеринга', 'Текст на упаковке не плывёт'], cta: 'Оплатить пакет', pop: true },
+    { name: 'Product Shots', sub: 'Масштабные кампании', price: '1 099', feats: ['200 роликов (Kling 2.5)', '+ 2 премиум-креатива (Veo 3.1)', 'Поддержка по подготовке карточек'], cta: 'Купить пакет', pop: false },
+  ];
   return (
     <section id="pricing" style={{ background: '#fff', borderTop: `1px solid ${line}` }}>
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '76px 28px' }}>
-        <SectionHead eyebrow="Тарифы" title="Простые пакетные тарифы" subtitle="Платите за готовые ролики. Оплата в рублях через ЮMoney, кредиты не сгорают" />
+        <SectionHead eyebrow="Тарифы" title="Простые пакетные тарифы" subtitle="Платите за готовые ролики. Оплата в рублях через ЮKassa, кредиты не сгорают" />
         <div className="vai-3col" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 22, marginTop: 46, alignItems: 'stretch' }}>
-          {PACKAGES.map(p => {
-            const pop = !!p.popular;
-            return (
-              <div key={p.id} style={{ position: 'relative', borderRadius: 20, padding: '32px 28px', display: 'flex', flexDirection: 'column', background: pop ? 'linear-gradient(160deg, #0D2B1E, #0A1F16)' : '#F8FBF9', border: pop ? '1px solid rgba(16,185,129,0.3)' : `1px solid ${line}`, boxShadow: pop ? '0 24px 60px rgba(10,46,31,0.22)' : 'none', transform: pop ? 'translateY(-8px)' : 'none' }}>
-                {pop && <div style={{ position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)', background: grad, color: '#fff', padding: '5px 16px', borderRadius: 100, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>Популярный</div>}
-                <div style={{ color: pop ? '#fff' : ink }}>
-                  <h3 style={{ fontFamily: '"Manrope", sans-serif', fontSize: 21, fontWeight: 800, margin: 0 }}>{p.title}</h3>
-                  <p style={{ fontSize: 13.5, color: pop ? 'rgba(255,255,255,0.55)' : muted, margin: '4px 0 0' }}>{p.subtitle}</p>
-                </div>
-                <div style={{ margin: '22px 0 24px', display: 'flex', alignItems: 'baseline', gap: 7, color: pop ? '#fff' : ink }}>
-                  <span style={{ fontFamily: '"Manrope", sans-serif', fontSize: 40, fontWeight: 800, letterSpacing: '-0.02em' }}>{p.price.toLocaleString('ru-RU')}</span>
-                  <span style={{ fontSize: 14, color: pop ? 'rgba(255,255,255,0.5)' : muted, fontWeight: 500 }}>₽ разово</span>
-                </div>
-                <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 28px', display: 'flex', flexDirection: 'column', gap: 12, flex: 1 }}>
-                  {p.feats.map(f => (
-                    <li key={f} style={{ display: 'flex', gap: 11, fontSize: 14.5, color: pop ? 'rgba(255,255,255,0.82)' : body, lineHeight: 1.4 }}>
-                      <span style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 6, background: pop ? 'rgba(16,185,129,0.2)' : C.primaryLight, color: C.primary, display: 'grid', placeItems: 'center' }}><Check size={12} /></span>{f}
-                    </li>
-                  ))}
-                </ul>
-                <Link to="/billing" style={{ textAlign: 'center', textDecoration: 'none', padding: 13, borderRadius: 11, fontSize: 15, fontWeight: 700, background: pop ? grad : 'transparent', color: pop ? '#fff' : C.primaryDark, border: pop ? 'none' : `1.5px solid ${C.primary}`, boxShadow: pop ? '0 8px 20px rgba(16,185,129,0.3)' : 'none' }}>{pop ? 'Оплатить пакет' : 'Купить пакет'}</Link>
+          {plans.map(p => (
+            <div key={p.name} style={{ position: 'relative', borderRadius: 20, padding: '32px 28px', display: 'flex', flexDirection: 'column', background: p.pop ? 'linear-gradient(160deg, #0D2B1E, #0A1F16)' : '#F8FBF9', border: p.pop ? '1px solid rgba(16,185,129,0.3)' : `1px solid ${line}`, boxShadow: p.pop ? '0 24px 60px rgba(10,46,31,0.22)' : 'none', transform: p.pop ? 'translateY(-8px)' : 'none' }}>
+              {p.pop && <div style={{ position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)', background: grad, color: '#fff', padding: '5px 16px', borderRadius: 100, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>Популярный</div>}
+              <div style={{ color: p.pop ? '#fff' : ink }}>
+                <h3 style={{ fontFamily: '"Manrope", sans-serif', fontSize: 21, fontWeight: 800, margin: 0 }}>{p.name}</h3>
+                <p style={{ fontSize: 13.5, color: p.pop ? 'rgba(255,255,255,0.55)' : muted, margin: '4px 0 0' }}>{p.sub}</p>
               </div>
-            );
-          })}
+              <div style={{ margin: '22px 0 24px', display: 'flex', alignItems: 'baseline', gap: 7, color: p.pop ? '#fff' : ink }}>
+                <span style={{ fontFamily: '"Manrope", sans-serif', fontSize: 40, fontWeight: 800, letterSpacing: '-0.02em' }}>{p.price}</span>
+                <span style={{ fontSize: 14, color: p.pop ? 'rgba(255,255,255,0.5)' : muted, fontWeight: 500 }}>₽ разово</span>
+              </div>
+              <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 28px', display: 'flex', flexDirection: 'column', gap: 12, flex: 1 }}>
+                {p.feats.map(f => (
+                  <li key={f} style={{ display: 'flex', gap: 11, fontSize: 14.5, color: p.pop ? 'rgba(255,255,255,0.82)' : body, lineHeight: 1.4 }}>
+                    <span style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 6, background: p.pop ? 'rgba(16,185,129,0.2)' : C.primaryLight, color: C.primary, display: 'grid', placeItems: 'center' }}><Check size={12} /></span>{f}
+                  </li>
+                ))}
+              </ul>
+              <Link to="/billing" style={{ textAlign: 'center', textDecoration: 'none', padding: 13, borderRadius: 11, fontSize: 15, fontWeight: 700, background: p.pop ? grad : 'transparent', color: p.pop ? '#fff' : C.primaryDark, border: p.pop ? 'none' : `1.5px solid ${C.primary}`, boxShadow: p.pop ? '0 8px 20px rgba(16,185,129,0.3)' : 'none' }}>{p.cta}</Link>
+            </div>
+          ))}
         </div>
       </div>
     </section>

@@ -1,6 +1,23 @@
 # CLAUDE.md — VideoAI
 
 > Системный промпт для Claude Code. Лежит в корне репозитория.
+> Обновлён 31.05.2026 после пивота (Спринт A).
+
+---
+
+## ЧТО ЗА ПРОДУКТ СЕЙЧАС (важно — был пивот)
+
+**VideoAI — AI Creative Engine для B2B.** Сервис коротких рекламных видеокреативов для селлеров маркетплейсов и малого e-commerce.
+
+**Флоу:** фото товара (или сгенерированная картинка) → оживление в короткий клип 5-8 сек (image-to-video на fal.ai) → готовый креатив (hook / product shot), скачивается MP4.
+
+**Было до пивота (НЕ актуально):** генератор роликов из текста со сценариями (GigaChat), картинками (Yandex ART), озвучкой (SpeechKit), раскадровкой и автопубликацией в соцсети. Этот пайплайн демонтирован в Спринте A. Подробности — `VIDEOAI_STRATEGY_V2.md` и `SPRINT_A_REPORT.md`.
+
+**Две модели оживления:**
+- **Kling 2.5 turbo** — эконом, рабочая лошадка ($0.21/ролik, 5 сек, без аудио). Заменил Wan 2.7 (Wan давал «лотерею» движения и плыл текст).
+- **Veo 3.1 fast** — премиум-апселл (720p, 8 сек, аудио выключено, эффектнее).
+
+Единый доступ через fal.ai (`@fal-ai/client`, async queue submit→poll→result).
 
 ---
 
@@ -8,15 +25,15 @@
 
 ```yaml
 project_name: "VideoAI"
-project_description: "AI-помощник для генерации видео для соцсетей с автопубликацией в VK, Telegram, MAX. Создаёт видео из текста, монтирует ролики из клипов, генерирует сценарии."
-audience: "both"
+project_description: "AI Creative Engine для B2B: короткие рекламные видеокреативы для селлеров. Фото товара → оживление в клип 5-8 сек (image-to-video, fal.ai Wan/Veo) → готовый креатив (hook / product shot)."
+audience: "b2b"
 locale: "ru"
 
 # Дизайн
 primary_color: "#10B981"      # Изумрудный
-dark_color: "#0A2E1F"          # Тёмно-зелёный (вместо стандартного #1A1A1C — для глубины бренда)
+dark_color: "#0A2E1F"          # Тёмно-зелёный
 bg_color: "#F7FAF8"            # Слегка зелёноватый светлый фон
-fonts_display: "Manrope"       # Современный, дружелюбный, отлично смотрится с #10B981
+fonts_display: "Manrope"
 fonts_body: "Inter"
 fonts_ui: "Inter"
 
@@ -24,20 +41,20 @@ fonts_ui: "Inter"
 auth: true
 auth_method: "email_otp"
 payments: true
-payment_provider: "yookassa"   # ЮKassa — российский рынок
-crm: false                     # Отложено до B2B-этапа
-crm_provider: ""
-admin_panel: true              # Нужна — модерация, статистика, управление кредитами
+payment_provider: "yoomoney_wallet"   # ЮMoney-кошелёк (Quickpay + HTTP-уведомления). Миграция на ЮKassa — когда «пойдёт»
+crm: false
+admin_panel: true
+upload: true                   # загрузка фото товара (multer → S3)
 
 # Инфраструктура
 github_repo: "https://github.com/ddvsnegDD/videoai"
 github_remote: "origin"
 domain: "ddvideoai.ru"         # Активен, HTTPS, DNS через Cloudflare
-hosting: "railway"             # Старт на Railway, миграция на Selectel/Yandex на B2B-этапе
+hosting: "railway"             # миграция на Selectel/Yandex на B2B-этапе
 db: "Postgres-DDvideoai"       # Отдельная база Railway (НЕ общая с другими проектами!)
 email_provider: "brevo"        # Домен ddvideoai.ru authenticated (SPF/DKIM/DMARC)
 email_from: "noreply@ddvideoai.ru"
-mail_hosting: "VK WorkSpace (Mail.ru)"  # Входящая почта на домене
+mail_hosting: "VK WorkSpace (Mail.ru)"
 ```
 
 ---
@@ -51,11 +68,19 @@ mail_hosting: "VK WorkSpace (Mail.ru)"  # Входящая почта на до�
 ## Статус спринтов (актуально)
 
 - **Спринт 0 — ЗАВЕРШЁН.** Лендинг на Railway, домен ddvideoai.ru с HTTPS, базовая структура.
-- **Спринт 1 — ЗАВЕРШЁН.** Авторизация email OTP (Brevo), JWT в httpOnly cookie, кабинет, 30 приветственных кредитов. Таблицы `users`, `auth_codes` (с `attempts` для brute-force защиты). Безопасность: crypto.randomInt для OTP, обязательный JWT_SECRET (без fallback), лимит 5 попыток, rate limit 60 сек, очистка протухших кодов.
-- **Спринт 2 — ЗАВЕРШЁН.** GigaChat (LLM), генерация сценариев, движок задач (jobs + polling), таблицы `projects` и `generation_jobs`, EditorPage.
-- **Спринт 3 — ЗАВЕРШЁН.** Yandex ART (картинки), SpeechKit (озвучка), Yandex Object Storage (S3), раскадровка сцен (storyboard), компонент Storyboard, выбор голоса.
+- **Спринт 1 — ЗАВЕРШЁН.** Авторизация email OTP (Brevo), JWT в httpOnly cookie, кабинет, приветственные кредиты (`WELCOME_CREDITS`, дефолт 50). Таблицы `users`, `auth_codes` (с `attempts` для brute-force защиты). Безопасность: crypto.randomInt для OTP, обязательный JWT_SECRET (без fallback), лимит 5 попыток, rate limit 60 сек, очистка протухших кодов.
+- **Спринт 2 — ЗАВЕРШЁН, частично перекрыт пивотом.** Движок задач (jobs + polling + retry + watchdog + возврат кредитов), таблицы `projects` и `generation_jobs`, EditorPage. Движок задач переиспользуется и сейчас. GigaChat (`llm.js`) сохранён для Спринта B; генерация сценариев/раскадровка демонтированы.
+- **Спринт 3 — ОТМЕНЁН пивотом.** Yandex ART, SpeechKit, раскадровка (storyboard), выбор голоса — удалены в Спринте A. Yandex Object Storage (S3) сохранён и используется.
+- **Спринт A — ЗАВЕРШЁН (с хвостами).** Демонтаж старого пайплайна; `falVideo.js` (image-to-video); загрузка фото (`multer` → S3); тип задачи `animate`; free-попытки; переработка EditorPage/ProjectPage. **Эконом-модель заменена Wan 2.7 → Kling 2.5 turbo** (дешевле и стабильнее). **Денежная утечка закрыта** — фикс из 5 слоёв + reconciler, подтверждён сквозным тестом №2 на проде (перезапуск в середине → дочитка без второго списания, $0.21). Хвосты: проверить `seed` у Kling, прогнать Veo, переписать промпты движения (убрать `rotation`), лендинг. Детали — `SPRINT_A_REPORT.md`.
+- **Спринт B — ЗАВЕРШЁН (живой тест пройден 01.06.2026).** Ветка «нет фото»: русское описание → GigaChat строит английский промпт (`buildImagePrompt`, с очисткой вывода) → картинка через **Nano Banana 2** (`fal-ai/nano-banana-2`, $0.08/картинка, 3:4) → подтверждение → существующее оживление (Kling/Veo). `llm.js` починен (убран мёртвый `scenario.js`). Новое: `falImage.js`, тип задачи `image`, `CREDITS_IMAGE` (13), `free_image` (пробник на картинку). Сквозной путь text→image→animate проверен живьём, качество — лучшее за проект (текст на сгенерированной картинке пережил оживление). **Важно для позиционирования:** путь «генерация» создаёт иллюстрацию ПО ОПИСАНИЮ, а не реальный товар пользователя.
+  - Хвосты: пропорции — генерация/Kling дают 3:4, Veo форсит 9:16 (не обрезает товар, достраивает фон — см. ниже); SSL-сертификаты GigaChat (`rejectUnauthorized:false` — долг до боевого запуска); лендинг.
+- **Veo на проде — ПРОВЕРЕН (02.06.2026).** Премиум-модель наконец запущена вживую: 8 сек, 720×1280 (9:16), без аудио, ~$1.20/ролик. Текст идеально цел, выраженный кинематографичный наезд, качество — лучшее за проект, апселл оправдан. Форс `aspect_ratio:'9:16'` на менее вертикальном фото **не обрезает товар, а достраивает окружение** (фон/стол) — старый страх про обрезку снят.
+- **Удаление проектов + ErrorBoundary (02.06.2026).** `DELETE /api/projects/:id` (проверка владельца, 409 при активной генерации, S3-cleanup best-effort, FK CASCADE на `generation_jobs`, `payments` не трогает). `<ErrorBoundary>` в `App.jsx` — защита от белого экрана при краше рендера.
+- **Спринт 6 — ЗАВЕРШЁН (реальный платёж подтверждён 02.06.2026).** Биллинг через **ЮMoney-кошелёк** (НЕ ЮKassa): Quickpay-ссылка с меткой `label` → HTTP-уведомление → проверка подписи `sign` (HMAC-SHA256, НЕ устаревший `sha1_hash`) → идемпотентное начисление по `operation_id`. `server/payments.js`, таблица `payments`, `BillingPage`. Пакеты роликов (эконом 199/890/2390/3990, премиум 590/2490) начисляются кредитами. Живой тест: 199 ₽ → кошелёк получил 193,03 ₽ (комиссия ЮMoney ~3%), кредиты начислены. **Поле суммы в webhook = `amount`** (после комиссии); допуск сверки 10% перекрывает. Хвосты: email-уведомление об оплате, polling баланса при `?paid=1`. (`<ErrorBoundary>` уже добавлен — см. ниже.)
 
 > При работе над новым спринтом не ломай и не переписывай код завершённых спринтов без явного указания.
+
+---
 
 ## Принципы работы
 
@@ -96,28 +121,36 @@ Google Fonts: Manrope + Inter
 ### Backend
 ```
 Express 5 (ESM)
-PostgreSQL — пользователи, проекты, задачи генерации, подписки
+PostgreSQL — пользователи, проекты, задачи генерации, платежи
 JWT в httpOnly cookie (jsonwebtoken + cookie-parser)
+multer — multipart upload фото товара
 Brevo — email
-ЮKassa — платежи
-Yandex Object Storage (S3-совместимое) — хранение видео
+ЮMoney-кошелёк — платежи (Quickpay + HTTP-уведомления, проверка подписи sign)
+Yandex Object Storage (S3-совместимое) — хранение фото и видео
 ```
 
-### AI-провайдеры (см. AI_PROVIDERS.md)
+### AI-провайдеры (текущие)
 ```
-GigaChat — LLM для сценариев и идей
-GigaChat Image / Kandinsky API — изображения
-Kandinsky Video (через GigaChat) — text-to-video
-Yandex SpeechKit — TTS
-FFmpeg — монтаж клипов
+fal.ai (@fal-ai/client) — image-to-video:
+  - Kling 2.5 turbo (fal-ai/kling-video/v2.5-turbo/standard/image-to-video) — эконом (заменил Wan 2.7)
+  - Veo 3.1 fast (fal-ai/veo3.1/fast/image-to-video) — премиум
+fal.ai — text-to-image: **Nano Banana 2** (`fal-ai/nano-banana-2`, $0.08/картинка, поддерживает seed, выход 3:4) — реализовано в Спринте B
+GigaChat (llm.js) — LLM. Активен в Спринте B: `buildImagePrompt` (русское описание → английский промпт картинки, с очисткой вывода и проверкой на кириллицу). `scenario.js` удалён.
+Nano Banana 2 (falImage.js) — text-to-image, $0.08/картинка, выход 3:4, поддерживает seed.
 ```
 
-### Социальные сети (см. SOCIAL_PROVIDERS.md)
+### Легаси / вне текущего скоупа
 ```
-VK API — публикация в группы и на стену
-Telegram Bot API — публикация в каналы
-MAX — заглушка через единый интерфейс PublishProvider (API в развитии)
+Yandex ART (image.js)     — УДАЛЁН в Спринте A
+Yandex SpeechKit (tts.js) — УДАЛЁН в Спринте A (своя озвучка — поздний слой)
+Kandinsky Video (video.js)— перекрыт falVideo.js, считать мёртвым (не подтверждено удаление файла)
+FFmpeg (editor.js)        — отложен до premium «ролик под ключ» (Этап 5)
+Соцсети (vk.js / telegram.js / max.js, PublishPage, SocialConnector, PublishScheduler)
+                          — пивот не трогал; текущий продукт = скачивание MP4, не автопубликация.
+                            Считать отложенным легаси, в новом флоу не использовать.
 ```
+
+> Перед работой со стеком сверяйся с `SPRINT_A_REPORT.md` (точный список удалённого/добавленного) и `AI_PROVIDERS.md`.
 
 ---
 
@@ -128,29 +161,26 @@ videoai/
 ├── index.html
 ├── package.json                # type: "module"
 ├── server.js                   # Express: API + статика
-├── vite.config.js              # прокси /api -> localhost:3001
+├── vite.config.js
 ├── CLAUDE.md                   # Этот файл
-├── PROJECT.md                  # Описание продукта и MVP-скоуп
-├── ROADMAP.md                  # План спринтов
-├── AI_PROVIDERS.md             # Контракты AI-провайдеров
-├── SOCIAL_PROVIDERS.md         # Контракты соцсетей
+├── PROJECT.md                  # Описание продукта (требует обновления под пивот)
+├── ROADMAP.md                  # План спринтов (требует обновления под пивот)
+├── AI_PROVIDERS.md             # Контракты AI-провайдеров (требует обновления: fal)
+├── VIDEOAI_STRATEGY_V2.md      # Стратегия (актуальна)
+├── SPRINT_A_REPORT.md          # Отчёт пивота (актуален)
 │
 ├── server/
-│   ├── db.js                   # PostgreSQL: pool, initDB
+│   ├── db.js                   # PostgreSQL: pool, initDB (+ free_wan/free_veo)
 │   ├── email.js                # Brevo
-│   ├── auth.js                 # JWT, OTP
-│   ├── storage.js              # S3 (Yandex Object Storage)
-│   ├── jobs.js                 # Очередь задач генерации (через PostgreSQL)
-│   ├── payments.js             # ЮKassa
+│   ├── auth.js                 # JWT, OTP (sanitizeUser отдаёт free_wan/free_veo)
+│   ├── storage.js              # S3 (uploadBuffer, deleteByPrefix)
+│   ├── jobs.js                 # Очередь задач (тип 'animate', free-tries)
+│   ├── payments.js             # ЮMoney-кошелёк: Quickpay, verifyYooMoneySign (HMAC-SHA256), webhook, идемпотентность по operation_id
 │   └── providers/
-│       ├── llm.js              # GigaChat: scenarios, ideas (OAuth токен на 30 мин, кешировать)
-│       ├── video.js            # Kandinsky Video
-│       ├── image.js            # GigaChat Image
-│       ├── tts.js              # Yandex SpeechKit
-│       ├── editor.js           # FFmpeg-обёртка для монтажа
-│       ├── vk.js               # VK API
-│       ├── telegram.js         # Telegram Bot API
-│       └── max.js              # Заглушка MAX
+│       ├── falVideo.js         # ★ fal.ai Kling/Veo, image-to-video, submit→poll→result
+│       ├── falImage.js         # ★ fal.ai Nano Banana 2, text-to-image (extractImageUrl: 6 fallback-путей)
+│       ├── llm.js              # GigaChat: buildImagePrompt (рус→англ промпт, очистка). scenario.js удалён
+│       └── (legacy, см. раздел выше: video.js, editor.js, vk.js, telegram.js, max.js — если ещё на диске)
 │
 ├── public/
 │   └── images/
@@ -160,32 +190,27 @@ videoai/
     ├── App.jsx
     ├── styles/global.css
     ├── data/
-    │   ├── templates.js        # Шаблоны видео (товарка, цитата, до/после, ...)
-    │   ├── tariffs.js          # Тарифы и пакеты кредитов
-    │   └── voices.js           # Голоса для озвучки
+    │   └── tariffs.js          # Пакеты креативов (черновик, см. стратегию)
     ├── components/
-    │   ├── Layout.jsx
+    │   ├── Layout.jsx          # хедер + бейдж кредитов + free-попытки
     │   ├── Btn.jsx
-    │   ├── ProjectCard.jsx
-    │   ├── GenerationProgress.jsx   # Прогресс-бар с polling
-    │   ├── VideoPreview.jsx
-    │   ├── TemplatePicker.jsx
-    │   ├── SocialConnector.jsx      # Подключение VK/TG
-    │   └── PublishScheduler.jsx     # Планировщик публикаций
+    │   ├── ProjectCard.jsx     # thumbnail из brief.image_url, бейдж Готово/Черновик
+    │   ├── GenerationProgress.jsx  # «Оживляю товар…», прогресс-бар с polling
+    │   └── (legacy: SocialConnector.jsx, PublishScheduler.jsx — вне скоупа)
     ├── lib/
     │   ├── auth.jsx            # AuthProvider
     │   ├── theme.js            # Палитра C
     │   ├── hooks.js            # useReveal, useDebounce, useJobPolling
     │   └── api.js              # fetch-обёртка
     └── pages/
-        ├── HomePage.jsx        # Лендинг
+        ├── HomePage.jsx        # ⚠ Лендинг: тексты про SpeechKit/Kandinsky устарели, нужен редизайн
         ├── LoginPage.jsx       # Email OTP
-        ├── DashboardPage.jsx   # Список проектов
-        ├── EditorPage.jsx      # Создание видео (главный экран)
-        ├── ProjectPage.jsx     # Просмотр проекта
-        ├── PublishPage.jsx     # Публикация в соцсети
+        ├── DashboardPage.jsx   # Список проектов («Создать креатив»)
+        ├── EditorPage.jsx      # ★ 4 шага: фото → движение → модель → результат
+        ├── ProjectPage.jsx     # видео-плеер + скачать + создать ещё
         ├── BillingPage.jsx     # Тарифы и оплата
-        └── AdminPage.jsx       # Админка
+        ├── AdminPage.jsx       # Админка (⚠ мёртвые ветки storyboard/regenerate_scene)
+        └── (legacy: PublishPage.jsx — вне скоупа)
 ```
 
 ---
@@ -211,11 +236,17 @@ export const C = {
 
 ### Задачи генерации — polling-модель
 
-Генерация видео занимает 30 сек — несколько минут. Не блокируем HTTP-запросом. Вместо этого:
+Оживление занимает 30 сек — несколько минут. Не блокируем HTTP-запросом:
 
-1. `POST /api/jobs` — создаёт запись в `generation_jobs`, возвращает `job_id`. Запускает фоновую обработку через `setImmediate` или дочерний процесс
-2. `GET /api/jobs/:id` — отдаёт `{ status, progress, result_url }`
-3. Фронт через `useJobPolling(jobId)` опрашивает каждые 2 секунды
+1. `POST /api/jobs` (type `animate`) — создаёт запись в `generation_jobs`, возвращает `job_id`, запускает фоновую обработку. Проверяет free-попытку (`free_wan`/`free_veo`); если есть — кредиты не списываются. **Дедуп:** перед сабмитом проверяет активную задачу (user+project) и `idempotency_key` (partial UNIQUE индекс `uniq_active_job`); повторный клик не создаёт второй запрос в fal. Лимит `MAX_CONCURRENT_JOBS_PER_USER = 2`.
+2. `GET /api/jobs/:id` — отдаёт `{ status, progress, result_url }`.
+3. Фронт через `useJobPolling(jobId)` опрашивает каждые 2 секунды.
+4. falVideo.js внутри задачи: задаётся явный `seed` (для воспроизводимости); `fal.queue.submit` → **`fal_request_id` сохраняется СРАЗУ, до поллинга** → цикл `fal.queue.status` → `fal.queue.result` → скачать видео → перезалить в S3.
+5. **Возврат кредитов/free — только при реальном `FAILED` от fal**, идемпотентно (флаг `refunded`). По нашему таймауту поллинга — НЕ рефандим и НЕ пере-сабмитим, оставляем задачу `running` для reconciler.
+6. **Reconciler** (`startReconciler`, каждые 90 c) подбирает «осиротевшие» задачи по `fal_request_id`, дочитывает у fal (COMPLETED→S3→done, FAILED→refund). 404 от fal = terminal failure. Это спасает результаты, за которые уже заплачено.
+7. **Watchdog** убивает только задачи БЕЗ `fal_request_id` (не дошедшие до submit); с `fal_request_id` ведёт reconciler.
+
+> Зачем так сложно: fal списывает за **выполненный** запрос независимо от того, забрало ли приложение результат. Без этих слоёв зависшие поллинги и повторные клики утекают в деньги (на тесте утекло $3 = 6 роликов вместо одного).
 
 Хук:
 ```javascript
@@ -239,20 +270,21 @@ export function useJobPolling(jobId) {
 }
 ```
 
+### Параметры fal (по-модельно — имена полей РАЗНЫЕ)
+- **Kling 2.5 turbo (эконом):** `duration:'5'` (строка!), `negative_prompt` (целевой по тексту), `cfg_scale:0.5` (строгость следования промпту). Нет `enable_prompt_expansion`, аудиодорожки нет. **`seed` — проверить, поддерживает ли Kling** (в текущем Input его нет). Эндпоинт `fal-ai/kling-video/v2.5-turbo/standard/image-to-video`. ~$0.21/ролик.
+- **Veo:** `resolution:'720p'`, `duration:'8s'` (строка с суффиксом), `generate_audio:false` (по умолчанию true!), `aspect_ratio:'9:16'`, `negative_prompt`. Проверен на проде: 8с, 720×1280, без аудио, ~$1.20; 9:16 не обрезает товар, а достраивает фон.
+- **seed:** задаётся явно и сохраняется (`generation_jobs.seed`, `projects.brief`). Без него — лотерея движения.
+- **negative_prompt:** целиться в текст (`warped text, distorted lettering, deformed logo`), а не `text overlay`. Промпты `MOTION_PRESETS` держат товар лицом к камере, без `rotation` (иначе «вентилятор»).
+- Финальный `input` логировать перед submit.
+
 ### Авторизация
-Стандартный поток из исходного промпта: email → POST `/api/auth/send-code` → код → verify → JWT cookie.
+email → POST `/api/auth/send-code` → код → verify → JWT cookie.
 
 ### Кнопки (Btn.jsx)
 ```jsx
-<Btn variant="primary" size="lg">Сгенерировать</Btn>
+<Btn variant="primary" size="lg">Создать креатив</Btn>
 <Btn variant="outline" disabled={loading}>Отмена</Btn>
 ```
-
-### Toast-уведомления
-Стандартный паттерн из исходного промпта (см. ниже в разделе CSS).
-
-### Формы
-Стандартный паттерн из исходного промпта.
 
 ---
 
@@ -272,16 +304,15 @@ app.use(express.json());
 app.use(cookieParser());
 
 // 1. Health
-app.get('/api/health', ...);
-
 // 2. Auth (send-code, verify, me, logout)
-// 3. Projects CRUD
-// 4. Jobs (создание, polling, отмена)
-// 5. Social (OAuth VK/TG, публикация)
-// 6. Payments (ЮKassa webhook + создание платежа)
-// 7. Admin
+// 3. Upload (POST /api/upload — multer multipart → S3)
+// 4. Config (GET /api/config — модели + пресеты движения + цены)
+// 5. Projects CRUD
+// 6. Jobs (POST type='animate' с проверкой free-tries, polling, отмена)
+// 7. Payments (ЮMoney: POST /create → Quickpay URL; POST /yoomoney-webhook → проверка sign + начисление; GET /history)
+// 8. Admin
 
-// 8. Статика + SPA fallback (ВСЕГДА ПОСЛЕДНИМ)
+// 9. Статика + SPA fallback (ВСЕГДА ПОСЛЕДНИМ)
 app.use(express.static(DIST));
 app.get('/{*splat}', (req, res) => res.sendFile(join(DIST, 'index.html')));
 
@@ -303,6 +334,9 @@ CREATE TABLE users (
   name VARCHAR(255),
   role VARCHAR(20) DEFAULT 'user',
   credits INTEGER DEFAULT 0,
+  free_wan INTEGER DEFAULT 1,        -- бесплатная пробная генерация Wan/Kling (эконом)
+  free_veo INTEGER DEFAULT 1,        -- бесплатная пробная генерация Veo (премиум)
+  free_image INTEGER DEFAULT 1,      -- бесплатная пробная генерация картинки (Спринт B)
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -312,7 +346,7 @@ CREATE TABLE auth_codes (
   code VARCHAR(6) NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
   used BOOLEAN DEFAULT FALSE,
-  attempts INTEGER DEFAULT 0,        -- brute-force защита: блок после 5 попыток
+  attempts INTEGER DEFAULT 0,        -- блок после 5 попыток
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -321,9 +355,9 @@ CREATE TABLE projects (
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   title VARCHAR(255) NOT NULL,
   template_id VARCHAR(50),
-  brief JSONB NOT NULL,              -- описание, длительность, голос, стиль
-  result_url TEXT,                   -- URL итогового видео в S3
-  status VARCHAR(20) DEFAULT 'draft',
+  brief JSONB NOT NULL,              -- { source:'upload', image_url, model, motion, video_url }
+  result_url TEXT,                   -- URL готового MP4 в S3
+  status VARCHAR(20) DEFAULT 'draft',-- 'draft' | 'ready'
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -331,71 +365,59 @@ CREATE TABLE generation_jobs (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
-  type VARCHAR(50) NOT NULL,         -- 'script' | 'video' | 'tts' | 'compose'
+  type VARCHAR(50) NOT NULL,         -- 'animate' (актуальный); 'image' добавится в Спринте B
   status VARCHAR(20) DEFAULT 'pending', -- pending | running | done | failed
   progress INTEGER DEFAULT 0,
-  input JSONB NOT NULL,
+  input JSONB NOT NULL,              -- содержит _freeColumn для возврата при сбое
   output JSONB,
   error TEXT,
   cost_credits INTEGER DEFAULT 0,
+  seed BIGINT,                       -- сид генерации (воспроизводимость)
+  fal_request_id TEXT,               -- id запроса в очереди fal (возобновление/сверка)
+  last_polled_at TIMESTAMPTZ,        -- для reconciler
+  idempotency_key TEXT,              -- дедуп; partial UNIQUE по активным
+  refunded BOOLEAN DEFAULT FALSE,    -- идемпотентный возврат
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+-- partial UNIQUE: не более одной активной задачи на ключ (защита от гонок/двойных кликов)
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_job ON generation_jobs (idempotency_key)
+  WHERE status IN ('pending','running') AND idempotency_key IS NOT NULL;
 
-CREATE TABLE social_connections (
+CREATE TABLE payments (             -- ЮMoney-кошелёк
   id SERIAL PRIMARY KEY,
-  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-  platform VARCHAR(20) NOT NULL,     -- 'vk' | 'telegram' | 'max'
-  account_id VARCHAR(255) NOT NULL,
-  access_token TEXT NOT NULL,         -- зашифрованный
-  refresh_token TEXT,
-  metadata JSONB,
+  user_id INTEGER REFERENCES users(id),
+  package_id TEXT,                   -- из tariffs.js (economy_1 ... premium_5)
+  label TEXT,                        -- userId:packageId:nonce (метка платежа)
+  expected_amount NUMERIC,           -- цена пакета
+  paid_amount NUMERIC,               -- поле amount из webhook (после комиссии ЮMoney ~3%)
+  operation_id TEXT,                 -- id операции ЮMoney (идемпотентность)
+  credits_granted INTEGER,
+  status TEXT DEFAULT 'pending',     -- pending / completed / mismatch
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(user_id, platform, account_id)
+  completed_at TIMESTAMPTZ
 );
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_operation_id ON payments (operation_id)
+  WHERE operation_id IS NOT NULL;    -- одно начисление на operation_id
 
-CREATE TABLE publications (
-  id SERIAL PRIMARY KEY,
-  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-  project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
-  platform VARCHAR(20) NOT NULL,
-  status VARCHAR(20) DEFAULT 'scheduled',
-  scheduled_at TIMESTAMPTZ,
-  published_at TIMESTAMPTZ,
-  external_id VARCHAR(255),           -- ID поста в соцсети
-  error TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE payments (
-  id SERIAL PRIMARY KEY,
-  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-  amount INTEGER NOT NULL,            -- копейки
-  credits INTEGER NOT NULL,           -- сколько кредитов начисляется
-  yookassa_id VARCHAR(255) UNIQUE,
-  status VARCHAR(20) DEFAULT 'pending',
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  paid_at TIMESTAMPTZ
-);
+-- Легаси (соцсети, вне текущего скоупа): social_connections, publications.
+-- Остались от старого пайплайна, новым флоу не используются.
 ```
 
 ---
 
 ## Кредитная модель
 
-Видео-генерация платная и дорогая. Используем кредиты:
+Генерация платная — кредиты. Стоимость читается из env при старте:
 
-- Генерация сценариев (3 варианта, LLM): 3 кредита (по 1 за вариант, частичный возврат при сбое)
-- Озвучка 30 сек: 2 кредита
-- Картинка (Kandinsky): 3 кредита
-- Видео-клип 5 сек (Kandinsky Video): 15 кредитов
-- Финальный монтаж: бесплатно (FFmpeg, наши ресурсы)
+- **Kling 2.5 (эконом):** `CREDITS_WAN` (дефолт 40) — имя переменной осталось от Wan, но управляет Kling-тарифом; факт ~$0.21/ролик
+- **Veo (премиум):** `CREDITS_VEO` (дефолт 90)
+- **Картинка (Спринт B):** `CREDITS_IMAGE` (дефолт 13); факт ~$0.08/картинка Nano Banana
+- **Пробник:** `free_wan` / `free_veo` / `free_image` = по 1 на старте — не списывают кредиты. _freeColumn различает все три.
+- Приветственные кредиты: `WELCOME_CREDITS` (дефолт 50).
+- При сбое генерации — кредиты или free-попытка возвращаются.
 
-Тарифы (см. `src/data/tariffs.js`):
-- Бесплатный: 30 кредитов на регистрацию, без публикации
-- Старт: 990 ₽ — 500 кредитов
-- Pro: 2990 ₽ — 2000 кредитов + планировщик
-- Бизнес: 9990 ₽ — 8000 кредитов + команды (B2B-фаза)
+Тарифы (черновик, финал после живого теста — см. `VIDEOAI_STRATEGY_V2.md`): продаём **пакеты результата** (готовые креативы), не «секунды». Двухрежимная экономика: Wan ~70 ₽/ролик себестоимость (290 ₽ за 1, до 4500 ₽ за 30), Veo ~160 ₽/ролик (апселл 590–990 ₽).
 
 ---
 
@@ -414,7 +436,6 @@ export default defineConfig({
 ---
 
 ## CSS — организация global.css
-
 ```css
 /* ====== RESET + BASE ====== */
 /* ====== LAYOUT ====== */
@@ -451,17 +472,17 @@ DATABASE_URL              # Railway PostgreSQL (авто)
 JWT_SECRET                # подпись JWT
 BREVO_API_KEY
 EMAIL_FROM
-ADMIN_PASSWORD
+EMAIL_FROM_NAME
+ADMIN_EMAIL               # промоут в admin
+WELCOME_CREDITS           # приветственные кредиты (дефолт 50)
+CREDITS_IMAGE             # стоимость картинки Nano Banana (дефолт 13)
+GIGACHAT_AUTH_KEY         # OAuth-ключ GigaChat (активен в Спринте B — buildImagePrompt)
+GIGACHAT_SCOPE            # scope GigaChat (дефолт GIGACHAT_API_PERS)
 
-# AI-провайдеры
-GIGACHAT_AUTH_KEY        # Authorization Key из Сбер AI Studio (base64 client_id:secret)
-GIGACHAT_SCOPE           # GIGACHAT_API_PERS (физлица) / GIGACHAT_API_CORP (юрлица)
-# ВАЖНО: GigaChat использует самоподписанный сертификат НУЦ Минцифры.
-# На Railway возможна ошибка SSL — подгружать цепочку Минцифры в https.Agent
-# (rejectUnauthorized: false как временный fallback, но лучше подложить russian_trusted_root_ca).
-
-YANDEX_SPEECHKIT_KEY
-YANDEX_FOLDER_ID
+# fal.ai
+FAL_KEY                   # единый ключ (Wan + Veo + Flux/Nano Banana)
+CREDITS_WAN               # стоимость Wan (дефолт 40)
+CREDITS_VEO               # стоимость Veo (дефолт 90)
 
 # S3 (Yandex Object Storage)
 S3_ENDPOINT=https://storage.yandexcloud.net
@@ -469,17 +490,21 @@ S3_BUCKET=videoai-media
 S3_ACCESS_KEY
 S3_SECRET_KEY
 
-# ЮKassa
-YOOKASSA_SHOP_ID
-YOOKASSA_SECRET_KEY
+# ЮMoney-кошелёк (платежи)
+YOOMONEY_WALLET                # номер кошелька-получателя
+YOOMONEY_NOTIFICATION_SECRET   # секрет для проверки подписи sign
+APP_URL                        # базовый URL для successURL (дефолт https://ddvideoai.ru)
 
-# Социальные сети
-VK_APP_ID
-VK_APP_SECRET
-TELEGRAM_BOT_TOKEN
+# Легаси (код больше не читает — можно удалить позже):
+# GIGACHAT_AUTH_KEY, GIGACHAT_SCOPE — понадобятся снова в Спринте B (GigaChat)
+# YANDEX_SPEECHKIT_KEY, YANDEX_API_KEY, YANDEX_FOLDER_ID — старый пайплайн
+# VK_APP_ID, VK_APP_SECRET, TELEGRAM_BOT_TOKEN — соцсети, вне скоупа
+# CREDITS_PER_REGEN, CREDITS_PER_VIDEO — старая кредитная модель
 
 NODE_ENV=production
 ```
+
+> GigaChat (Спринт B) использует самоподписанный сертификат НУЦ Минцифры — на Railway возможна ошибка SSL, подгружать цепочку (russian_trusted_root_ca) в https.Agent.
 
 ---
 
@@ -494,8 +519,13 @@ NODE_ENV=production
 - Не используй TypeScript в MVP
 - Не используй `alert()` — toast-уведомления
 - Не блокируй HTTP-запрос на время генерации — всегда через jobs + polling
-- Не храни видео локально — всегда S3
+- Не храни видео/фото локально — всегда S3
 - Не вызывай AI-провайдеры с фронта — только через бэк
-- Не хардкодь промпты в коде — все промпты для LLM в `server/prompts/`
-- Не переписывай код завершённых спринтов (см. «Статус спринтов») без явного указания
+- Не передавай параметры fal одним общим объектом — у Wan и Veo разные имена полей
+- Не пере-сабмить задачу в fal по нашему таймауту — возобновляй по сохранённому `fal_request_id` (иначе платим дважды)
+- Не возвращай кредиты по таймауту поллинга — только при реальном `FAILED` от fal, и идемпотентно (флаг `refunded`)
+- Не сохраняй `fal_request_id` после поллинга — только СРАЗУ после submit, иначе обрыв осиротит оплаченную задачу
+- Не используй `fal.subscribe` для генерации — только `fal.queue.submit` + опрос по `request_id` (subscribe не возобновляется после обрыва)
+- Не полагайся на случайный seed — задавай и сохраняй явный seed; амплитуду движения чини промптом, не подбором сида
+- Не возрождай удалённый в Спринте A код (Yandex ART, SpeechKit, раскадровка) без явного указания
 - Не используй общую БД с другими проектами — только Postgres-DDvideoai
