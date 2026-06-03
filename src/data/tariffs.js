@@ -1,56 +1,45 @@
 // Source of truth for package prices and credit amounts.
 // Backend reads this file directly — never trust price/credits from client.
 export const PACKAGES = [
-  // ── Economy (Kling) ──
   {
-    id: 'economy_1',
-    title: '1 ролик',
-    subtitle: 'Попробовать',
-    price: 199,
-    credits: 40,
-    kind: 'economy',
+    id: 'hook',
+    title: 'Hook Pack',
+    subtitle: '3 эконом-ролика для тестирования гипотез',
+    price: 599,
+    credits: 120,
+    feats: [
+      '3 эконом-ролика (Kling)',
+      'Скачивание MP4',
+      'Все пресеты движения',
+      'Генерация картинки по тексту',
+    ],
   },
   {
-    id: 'economy_5',
-    title: '5 роликов',
-    subtitle: 'Оптимальный старт',
-    price: 890,
-    credits: 200,
-    kind: 'economy',
+    id: 'product_shots',
+    title: 'Product Shots',
+    subtitle: '6 эконом-роликов или 2 премиум',
+    price: 1099,
+    credits: 240,
+    feats: [
+      '6 эконом-роликов (Kling)',
+      'Или 2 премиум (Veo)',
+      'Все пресеты движения',
+      'Генерация картинки по тексту',
+    ],
+  },
+  {
+    id: 'seller',
+    title: 'Seller',
+    subtitle: '9 эконом-роликов или 4 премиум',
+    price: 1599,
+    credits: 360,
     popular: true,
-  },
-  {
-    id: 'economy_15',
-    title: '15 роликов',
-    subtitle: 'Для активной работы',
-    price: 2390,
-    credits: 600,
-    kind: 'economy',
-  },
-  {
-    id: 'economy_30',
-    title: '30 роликов',
-    subtitle: 'Максимальная выгода',
-    price: 3990,
-    credits: 1200,
-    kind: 'economy',
-  },
-  // ── Premium (Veo) ──
-  {
-    id: 'premium_1',
-    title: '1 премиум',
-    subtitle: 'Кинематографичное качество',
-    price: 590,
-    credits: 90,
-    kind: 'premium',
-  },
-  {
-    id: 'premium_5',
-    title: '5 премиум',
-    subtitle: 'Серия премиум-роликов',
-    price: 2490,
-    credits: 450,
-    kind: 'premium',
+    feats: [
+      '9 эконом-роликов (Kling)',
+      'Или 4 премиум (Veo)',
+      'Лучшая цена за кредит',
+      'Все возможности платформы',
+    ],
   },
 ];
 
@@ -59,8 +48,7 @@ export function getPackageById(id) {
   return PACKAGES.find(p => p.id === id) || null;
 }
 
-// Legacy export used by HomePage landing — keeps marketing card structure
-// (name, features, limits, popular, description)
+// Export used by HomePage landing — keeps marketing card structure
 export const tariffs = [
   {
     id: 'free',
@@ -78,35 +66,33 @@ export const tariffs = [
     popular: false,
   },
   {
-    id: 'economy_5',
-    name: 'Эконом',
-    kind: 'economy',
-    price: 890,
-    credits: 200,
-    description: 'Для регулярной работы с контентом',
+    id: 'hook',
+    name: 'Hook Pack',
+    price: 599,
+    credits: 120,
+    description: '3 ролика для тестирования гипотез',
     features: [
-      '5 эконом-роликов (Kling)',
+      '3 эконом-ролика (Kling)',
       'Скачивание MP4',
       'Все пресеты движения',
       'Генерация картинки по тексту',
     ],
     limits: [],
-    popular: true,
+    popular: false,
   },
   {
-    id: 'premium_5',
-    name: 'Премиум',
-    kind: 'premium',
-    price: 2490,
-    credits: 450,
-    description: 'Кинематографичное качество',
+    id: 'seller',
+    name: 'Seller',
+    price: 1599,
+    credits: 360,
+    description: 'Полный комплект для селлера',
     features: [
-      '5 премиум-роликов (Veo)',
-      'Максимальное качество движения',
-      'Скачивание MP4',
-      'Все возможности Эконома',
+      '9 эконом-роликов (Kling)',
+      'Или 4 премиум (Veo)',
+      'Лучшая цена за кредит',
+      'Все возможности платформы',
     ],
     limits: [],
-    popular: false,
+    popular: true,
   },
 ];
