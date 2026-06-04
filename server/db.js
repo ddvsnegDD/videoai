@@ -1,9 +1,16 @@
 import pg from 'pg';
 const { Pool } = pg;
 
+// SSL: включаем только для удалённых БД (Railway и т.п.),
+// для локального PostgreSQL на VPS — не нужен
+const dbUrl = process.env.DATABASE_URL || '';
+const isLocalDB = /localhost|127\.0\.0\.1|\/var\/run/.test(dbUrl);
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: process.env.NODE_ENV === 'production' && !isLocalDB
+    ? { rejectUnauthorized: false }
+    : false,
 });
 
 export async function initDB() {

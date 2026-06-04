@@ -22,6 +22,8 @@ function extractS3Key(url) {
 }
 
 const app = express();
+app.set('trust proxy', 1); // За Nginx reverse proxy: корректный req.ip, req.protocol, secure-кука
+
 const DIST = resolve('dist');
 
 app.use(express.json());
