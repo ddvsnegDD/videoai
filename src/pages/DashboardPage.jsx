@@ -14,7 +14,9 @@ const glassPanel = {
 };
 
 function ProjectCard({ p, onDelete }) {
+  const navigate = useNavigate();
   const v = useRef(null);
+  const [hovered, setHovered] = useState(false);
   const brief = typeof p.brief === 'string' ? JSON.parse(p.brief) : (p.brief || {});
   const videoUrl = brief?.video_url || p.result_url;
   const thumbUrl = brief?.image_url;
@@ -37,9 +39,10 @@ function ProjectCard({ p, onDelete }) {
 
   return (
     <div
-      onMouseEnter={() => v.current?.play().catch(() => {})}
-      onMouseLeave={() => { if (v.current) { v.current.pause(); try { v.current.currentTime = 2.3; } catch {} } }}
-      style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2EAE6', overflow: 'hidden', boxShadow: '0 4px 12px rgba(10,46,31,0.03)', position: 'relative' }}
+      onClick={() => navigate(`/project/${p.id}`)}
+      onMouseEnter={() => { setHovered(true); v.current?.play().catch(() => {}); }}
+      onMouseLeave={() => { setHovered(false); if (v.current) { v.current.pause(); try { v.current.currentTime = 2.3; } catch {} } }}
+      style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2EAE6', overflow: 'hidden', boxShadow: hovered ? '0 8px 24px rgba(10,46,31,0.10)' : '0 4px 12px rgba(10,46,31,0.03)', position: 'relative', cursor: 'pointer', transition: 'box-shadow 0.2s ease, transform 0.2s ease', transform: hovered ? 'translateY(-2px)' : 'none' }}
     >
       <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#0a1f16', display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
         {hasVideo ? (
@@ -65,14 +68,14 @@ function ProjectCard({ p, onDelete }) {
         <div style={{ fontSize: 12.5, color: '#6B7F74', marginBottom: 14 }}>{date}</div>
         <div style={{ display: 'flex', gap: 8, borderTop: '1px solid #F1F5F9', paddingTop: 12 }}>
           {hasVideo ? (
-            <a href={videoUrl} download target="_blank" rel="noreferrer" style={{ flex: 1, textDecoration: 'none' }}>
+            <a href={videoUrl} download target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ flex: 1, textDecoration: 'none' }}>
               <button style={{ width: '100%', padding: 10, borderRadius: 8, border: 'none', background: '#F1F5F9', color: C.dark, fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Download size={14} /> Скачать MP4</button>
             </a>
           ) : (
             <button disabled style={{ flex: 1, padding: 10, borderRadius: 8, border: 'none', background: '#F1F5F9', color: '#94A3B8', fontWeight: 600, fontSize: 13, cursor: 'not-allowed' }}>В процессе...</button>
           )}
           <button
-            onClick={() => setConfirming(true)}
+            onClick={e => { e.stopPropagation(); setConfirming(true); }}
             style={{ padding: '10px 12px', borderRadius: 8, border: 'none', background: 'rgba(239,68,68,0.07)', color: '#EF4444', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
           ><Trash2 size={14} /></button>
         </div>
@@ -81,7 +84,7 @@ function ProjectCard({ p, onDelete }) {
       {/* Delete confirmation overlay */}
       {confirming && (
         <div
-          onClick={() => setConfirming(false)}
+          onClick={e => { e.stopPropagation(); setConfirming(false); }}
           style={{
             position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)',
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
