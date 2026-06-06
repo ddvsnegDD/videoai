@@ -1,11 +1,28 @@
-const BREVO_URL = 'https://api.brevo.com/v3/smtp/email';
+import nodemailer from 'nodemailer';
+
+const SMTP_HOST = process.env.SMTP_HOST || 'smtp.mail.ru';
+const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
+const SMTP_USER = process.env.SMTP_USER;
+const SMTP_PASS = process.env.SMTP_PASS;
+const EMAIL_FROM = process.env.EMAIL_FROM || SMTP_USER || 'noreply@ddvideoai.ru';
+
+let transporter = null;
+
+function getTransporter() {
+  if (transporter) return transporter;
+  transporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_PORT === 465,
+    requireTLS: SMTP_PORT === 587,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+  });
+  return transporter;
+}
 
 export async function sendOTPEmail(to, code) {
-  const apiKey = process.env.BREVO_API_KEY;
-  const from = process.env.EMAIL_FROM || 'noreply@videoai.ru';
-
-  if (!apiKey) {
-    console.warn('BREVO_API_KEY not set — logging OTP to console');
+  if (!SMTP_USER || !SMTP_PASS) {
+    console.warn('SMTP_USER/SMTP_PASS not set — logging OTP to console');
     console.log(`[OTP] ${to} → ${code}`);
     return { ok: true, mock: true };
   }
@@ -35,26 +52,16 @@ export async function sendOTPEmail(to, code) {
 </body>
 </html>`.trim();
 
-  const res = await fetch(BREVO_URL, {
-    method: 'POST',
-    headers: {
-      'accept': 'application/json',
-      'content-type': 'application/json',
-      'api-key': apiKey,
-    },
-    body: JSON.stringify({
-      sender: { name: 'VideoAI', email: from },
-      to: [{ email: to }],
+  try {
+    await getTransporter().sendMail({
+      from: `"VideoAI" <${EMAIL_FROM}>`,
+      to,
       subject: `${code} — код входа в VideoAI`,
-      htmlContent: html,
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    console.error('Brevo error:', err);
+      html,
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error('SMTP error:', err);
     throw new Error('Failed to send email');
   }
-
-  return { ok: true };
 }
