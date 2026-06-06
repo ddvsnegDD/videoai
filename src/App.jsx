@@ -12,6 +12,9 @@ import EditorPage from './pages/EditorPage';
 import ProjectPage from './pages/ProjectPage';
 import BillingPage from './pages/BillingPage';
 import AdminPage from './pages/AdminPage';
+import OfertaPage from './pages/OfertaPage';
+import PrivacyPage from './pages/PrivacyPage';
+import ConsentPage from './pages/ConsentPage';
 
 /* ── ErrorBoundary (ловит рендер-ошибки, не даёт белый экран) ── */
 class ErrorBoundary extends Component {
@@ -67,6 +70,11 @@ export default function App() {
             {/* Гостевой слой */}
             <Route path="/" element={<HomePage />} />
             <Route path="/login" element={<LoginPage />} />
+
+            {/* Юридические документы (публичные) */}
+            <Route path="/oferta" element={<OfertaPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/consent" element={<ConsentPage />} />
 
             {/* Кабинет селлера */}
             <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />

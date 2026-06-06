@@ -15,6 +15,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [countdown, setCountdown] = useState(0);
+  const [agreed, setAgreed] = useState(false);
   const codeRefs = useRef([]);
 
   // Redirect if already logged in
@@ -201,10 +202,41 @@ export default function LoginPage() {
                   }}>{error}</p>
                 )}
 
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 10,
+                  marginBottom: 20,
+                  cursor: 'pointer',
+                  fontSize: '0.75rem',
+                  lineHeight: 1.5,
+                  color: C.gray500,
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={agreed}
+                    onChange={e => setAgreed(e.target.checked)}
+                    style={{
+                      width: 18,
+                      height: 18,
+                      marginTop: 1,
+                      flexShrink: 0,
+                      accentColor: C.primary,
+                      cursor: 'pointer',
+                    }}
+                  />
+                  <span>
+                    Я принимаю условия{' '}
+                    <a href="/oferta" target="_blank" rel="noopener noreferrer" style={{ color: C.primary, textDecoration: 'underline', textUnderlineOffset: 2 }}>Публичной оферты</a>
+                    {' '}и даю согласие на обработку моих персональных данных в соответствии с{' '}
+                    <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: C.primary, textDecoration: 'underline', textUnderlineOffset: 2 }}>Политикой конфиденциальности</a>.
+                  </span>
+                </label>
+
                 <Btn
                   variant="primary"
                   size="lg"
-                  disabled={loading || !email}
+                  disabled={loading || !email || !agreed}
                   style={{ width: '100%' }}
                 >
                   {loading ? (
@@ -343,7 +375,11 @@ export default function LoginPage() {
           marginTop: 24,
           lineHeight: 1.5,
         }}>
-          Продолжая, вы соглашаетесь с условиями использования сервиса
+          <a href="/oferta" target="_blank" rel="noopener noreferrer" style={{ color: C.gray400, textDecoration: 'underline' }}>Оферта</a>
+          {' · '}
+          <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: C.gray400, textDecoration: 'underline' }}>Конфиденциальность</a>
+          {' · '}
+          <a href="/consent" target="_blank" rel="noopener noreferrer" style={{ color: C.gray400, textDecoration: 'underline' }}>Согласие на обработку ПДн</a>
         </p>
       </div>
     </div>

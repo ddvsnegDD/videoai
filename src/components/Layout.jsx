@@ -6,6 +6,71 @@ import { useAuth } from '../lib/auth';
 import { isAdmin } from '../lib/adminConfig';
 import { C } from '../lib/theme';
 
+function SiteFooter() {
+  const year = new Date().getFullYear();
+  return (
+    <footer style={{
+      borderTop: `1px solid ${C.gray200}`,
+      background: 'rgba(248,250,249,0.92)',
+      padding: '36px 24px 32px',
+      fontSize: '0.8125rem',
+      color: C.gray500,
+      lineHeight: 1.6,
+    }}>
+      <div style={{
+        maxWidth: 1280,
+        margin: '0 auto',
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '28px 48px',
+        justifyContent: 'space-between',
+      }}>
+        {/* Бренд + копирайт */}
+        <div style={{ minWidth: 180 }}>
+          <div style={{
+            fontFamily: "'Manrope', sans-serif",
+            fontWeight: 800,
+            fontSize: '1.1rem',
+            color: C.dark,
+            marginBottom: 8,
+          }}>
+            Video<span style={{ color: C.primary }}>AI</span>
+          </div>
+          <div>&copy; {year} VideoAI</div>
+        </div>
+
+        {/* Реквизиты */}
+        <div style={{ minWidth: 220 }}>
+          <div style={{ fontWeight: 600, color: C.gray600, marginBottom: 6 }}>Реквизиты</div>
+          <div>Дзыга Дмитрий Владиславович</div>
+          <div>Самозанятый (плательщик НПД)</div>
+          <div>ИНН: 505004685439</div>
+          <div>Email: ddv1121@yandex.ru</div>
+        </div>
+
+        {/* Документы */}
+        <div style={{ minWidth: 200 }}>
+          <div style={{ fontWeight: 600, color: C.gray600, marginBottom: 6 }}>Документы</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <Link to="/oferta" style={{ color: C.gray500, textDecoration: 'none', transition: 'color 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.color = C.primary}
+              onMouseLeave={e => e.currentTarget.style.color = C.gray500}
+            >Публичная оферта</Link>
+            <Link to="/privacy" style={{ color: C.gray500, textDecoration: 'none', transition: 'color 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.color = C.primary}
+              onMouseLeave={e => e.currentTarget.style.color = C.gray500}
+            >Политика конфиденциальности</Link>
+            <Link to="/consent" style={{ color: C.gray500, textDecoration: 'none', transition: 'color 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.color = C.primary}
+              onMouseLeave={e => e.currentTarget.style.color = C.gray500}
+            >Согласие на обработку ПДн</Link>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
 /**
  * Сквозной контейнер: липкая шапка (лого, навигация, баланс, аватар)
  * + <Outlet/> для страниц. На гостевых страницах (/, /login) шапка кабинета
@@ -22,7 +87,7 @@ export default function Layout() {
   const { pathname } = useLocation();
 
   // На лендинге и логине не показываем шапку кабинета
-  const isGuestPage = pathname === '/' || pathname === '/login';
+  const isGuestPage = pathname === '/' || pathname === '/login' || pathname === '/oferta' || pathname === '/privacy' || pathname === '/consent';
 
   const navItems = [
     { to: '/dashboard', label: 'Проекты' },
@@ -41,6 +106,7 @@ export default function Layout() {
     return (
       <div style={pageBg}>
         <Outlet />
+        <SiteFooter />
       </div>
     );
   }
@@ -96,6 +162,7 @@ export default function Layout() {
         </div>
       </header>
       <Outlet />
+      <SiteFooter />
     </div>
   );
 }
