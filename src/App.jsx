@@ -9,6 +9,7 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import EditorPage from './pages/EditorPage';
+import ProjectPage from './pages/ProjectPage';
 import BillingPage from './pages/BillingPage';
 import AdminPage from './pages/AdminPage';
 
@@ -70,6 +71,7 @@ export default function App() {
             {/* Кабинет селлера */}
             <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
             <Route path="/editor" element={<ProtectedRoute><EditorPage /></ProtectedRoute>} />
+            <Route path="/project/:id" element={<ProtectedRoute><ProjectPage /></ProtectedRoute>} />
             <Route path="/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
 
             {/* Админка — только для ADMIN_EMAILS */}

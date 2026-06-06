@@ -42,6 +42,19 @@ const upload = multer({
   },
 });
 
+// Multer for audio upload (отдельный — другой размер и типы)
+const audioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
+  fileFilter: (_req, file, cb) => {
+    const ok = [
+      'audio/mpeg', 'audio/mp3', 'audio/aac', 'audio/mp4', 'audio/x-m4a',
+      'audio/wav', 'audio/x-wav', 'audio/ogg',
+    ].includes(file.mimetype);
+    cb(ok ? null : new Error('unsupported_audio_type'), ok);
+  },
+});
+
 // ── Health ──
 app.get('/api/health', async (req, res) => {
   let db = false;
@@ -257,6 +270,89 @@ app.delete('/api/projects/:id', requireAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('delete project error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// ── Audio overlay ──
+// In-flight guard: prevents parallel mixes for the same project
+const mixingProjects = new Set();
+
+app.post('/api/projects/:id/audio', requireAuth, audioUpload.single('audio'), async (req, res) => {
+  const projectId = Number(req.params.id);
+  try {
+    if (!req.file) return res.status(400).json({ error: 'no_audio_file' });
+
+    // 1. Load project
+    const projResult = await pool.query(
+      'SELECT * FROM projects WHERE id = $1', [projectId],
+    );
+    if (projResult.rows.length === 0) return res.status(404).json({ error: 'not_found' });
+    const project = projResult.rows[0];
+
+    // 2. Ownership check
+    if (project.user_id !== req.userId) return res.status(403).json({ error: 'forbidden' });
+
+    // 3. Get video URL
+    const brief = typeof project.brief === 'string' ? JSON.parse(project.brief) : project.brief;
+    const videoUrl = brief?.video_url || project.result_url;
+    if (!videoUrl) return res.status(400).json({ error: 'no_video' });
+
+    // 4. Parallel guard
+    if (mixingProjects.has(projectId)) {
+      return res.status(429).json({ error: 'mix_in_progress' });
+    }
+    mixingProjects.add(projectId);
+
+    try {
+      // 5. Upload source audio to S3
+      const extMap = {
+        'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/aac': 'aac',
+        'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/wav': 'wav',
+        'audio/x-wav': 'wav', 'audio/ogg': 'ogg',
+      };
+      const audioExt = extMap[req.file.mimetype] || 'mp3';
+      const audioSourceKey = `projects/${projectId}/audio-source.${audioExt}`;
+      const audioSourceUrl = await uploadBuffer({
+        buffer: req.file.buffer,
+        key: audioSourceKey,
+        contentType: req.file.mimetype,
+      });
+
+      // 6. FFmpeg mix
+      const { mixAudioIntoVideo } = await import('./server/audio.js');
+      const resultBuffer = await mixAudioIntoVideo({
+        videoUrl,
+        audioBuffer: req.file.buffer,
+        audioExt,
+      });
+
+      // 7. Upload result to S3
+      const resultKey = `projects/${projectId}/video-audio-${Date.now()}.mp4`;
+      const audioVideoUrl = await uploadBuffer({
+        buffer: resultBuffer,
+        key: resultKey,
+        contentType: 'video/mp4',
+      });
+
+      // 8. Update project brief (keep original video_url intact)
+      const updatedBrief = { ...brief, audio_video_url: audioVideoUrl, audio_source_url: audioSourceUrl };
+      await pool.query(
+        'UPDATE projects SET brief = $1 WHERE id = $2',
+        [JSON.stringify(updatedBrief), projectId],
+      );
+
+      console.log(`[Audio] Project ${projectId}: mixed audio, result ${audioVideoUrl}`);
+      res.json({ ok: true, audio_video_url: audioVideoUrl });
+    } finally {
+      mixingProjects.delete(projectId);
+    }
+  } catch (err) {
+    mixingProjects.delete(projectId);
+    console.error('audio overlay error:', err);
+    if (err.message?.includes('ffmpeg') || err.message?.includes('duration')) {
+      return res.status(500).json({ error: 'mix_failed', message: err.message });
+    }
     res.status(500).json({ error: 'server_error' });
   }
 });
