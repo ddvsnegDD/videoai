@@ -7,6 +7,10 @@ const WATCHDOG_TIMEOUT_MIN = 20;
 const MAX_CONCURRENT_JOBS_PER_USER = 2;
 const RECONCILER_INTERVAL = 90_000; // 1.5 min
 
+// Long video: segment composition and pricing
+const DURATION_SEGMENTS = { 5: [5], 10: [10], 15: [10, 5], 20: [10, 10] };
+const CREDITS_PER_SEC = 8;
+
 // ── Seed generation ──
 
 function generateSeed() {
@@ -122,6 +126,231 @@ export async function listJobs({ userId, projectId }) {
   return result.rows;
 }
 
+// ── Segment groups (long video) ──
+
+export async function createSegmentGroup({ userId, projectId, targetDuration, input }) {
+  const segments = DURATION_SEGMENTS[targetDuration];
+  if (!segments) throw new Error('INVALID_DURATION');
+
+  const totalCredits = segments.reduce((s, d) => s + d * CREDITS_PER_SEC, 0);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Check for existing active jobs for this project
+    const activeJobs = await client.query(
+      `SELECT id FROM generation_jobs
+       WHERE user_id = $1 AND project_id = $2 AND status IN ('pending','running')
+       LIMIT 1`,
+      [userId, projectId],
+    );
+    if (activeJobs.rows.length > 0) throw new Error('TOO_MANY_ACTIVE_JOBS');
+
+    // Check balance
+    const userRow = await client.query(
+      'SELECT credits FROM users WHERE id = $1 FOR UPDATE',
+      [userId],
+    );
+    if (!userRow.rows.length) throw new Error('USER_NOT_FOUND');
+    const user = userRow.rows[0];
+
+    if (user.credits < totalCredits) throw new Error('INSUFFICIENT_CREDITS');
+    await client.query('UPDATE users SET credits = credits - $1 WHERE id = $2', [totalCredits, userId]);
+    console.log(`[Credits] Group: charged ${totalCredits} for ${targetDuration}s. User ${userId}: ${user.credits} → ${user.credits - totalCredits}`);
+
+    // Create group
+    const groupId = crypto.randomUUID();
+    await client.query(
+      `INSERT INTO video_groups (id, project_id, user_id, target_duration, segments_count, status)
+       VALUES ($1, $2, $3, $4, $5, 'pending')`,
+      [groupId, projectId, userId, targetDuration, segments.length],
+    );
+
+    // Create segment jobs
+    const jobIds = [];
+    for (let i = 0; i < segments.length; i++) {
+      const segDuration = segments[i];
+      const segCredits = segDuration * CREDITS_PER_SEC;
+      const seed = generateSeed();
+      const idempotencyKey = makeIdempotencyKey('animate', input, seed);
+      const jobInput = { ...input, durationSec: String(segDuration) };
+
+      const job = await client.query(
+        `INSERT INTO generation_jobs (user_id, project_id, type, input, cost_credits, status, seed, idempotency_key, group_id, segment_index, segment_duration)
+         VALUES ($1, $2, 'animate', $3, $4, 'pending', $5, $6, $7, $8, $9) RETURNING id`,
+        [userId, projectId, JSON.stringify(jobInput), segCredits, seed, idempotencyKey, groupId, i, String(segDuration)],
+      );
+      jobIds.push(job.rows[0].id);
+    }
+
+    await client.query('COMMIT');
+
+    // Launch all segment jobs in parallel
+    for (const jid of jobIds) {
+      setImmediate(() => runJob(jid));
+    }
+
+    console.log(`[Group] Created group ${groupId}: ${segments.length} segments, ${totalCredits} credits`);
+    return { groupId, jobIds };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function getGroup(groupId, userId) {
+  const groupRow = await pool.query(
+    'SELECT * FROM video_groups WHERE id = $1 AND user_id = $2',
+    [groupId, userId],
+  );
+  if (!groupRow.rows.length) return null;
+  const group = groupRow.rows[0];
+
+  const segRows = await pool.query(
+    `SELECT id, status, progress, output, segment_index, segment_duration
+     FROM generation_jobs WHERE group_id = $1 ORDER BY segment_index`,
+    [groupId],
+  );
+
+  const avgProgress = segRows.rows.length > 0
+    ? Math.round(segRows.rows.reduce((s, r) => s + (r.progress || 0), 0) / segRows.rows.length)
+    : 0;
+
+  let videoUrl = null;
+  if (group.status === 'ready') {
+    const projRow = await pool.query('SELECT result_url FROM projects WHERE id = $1', [group.project_id]);
+    videoUrl = projRow.rows[0]?.result_url;
+  }
+
+  return {
+    id: group.id,
+    status: group.status,
+    target_duration: group.target_duration,
+    segments_count: group.segments_count,
+    progress: avgProgress,
+    video_url: videoUrl,
+    segments: segRows.rows.map(s => ({
+      id: s.id,
+      status: s.status,
+      progress: s.progress,
+      segment_index: s.segment_index,
+      segment_duration: s.segment_duration,
+    })),
+  };
+}
+
+async function tryFinalizeGroup(groupId) {
+  const groupRow = await pool.query('SELECT * FROM video_groups WHERE id = $1', [groupId]);
+  if (!groupRow.rows.length) return;
+  const group = groupRow.rows[0];
+
+  if (group.status === 'ready' || group.status === 'failed') return;
+
+  const segRows = await pool.query(
+    `SELECT id, status, output, cost_credits, user_id, segment_index, refunded
+     FROM generation_jobs WHERE group_id = $1 ORDER BY segment_index`,
+    [groupId],
+  );
+  const segments = segRows.rows;
+
+  const failedSegments = segments.filter(s => s.status === 'failed');
+  const doneSegments = segments.filter(s => s.status === 'done');
+  const activeSegments = segments.filter(s => ['pending', 'running'].includes(s.status));
+
+  // Any still active → wait
+  if (activeSegments.length > 0) return;
+
+  // Any failed (and none active) → group fails
+  if (failedSegments.length > 0) {
+    await failGroupInternal(groupId, group, segments);
+    return;
+  }
+
+  // All done → finalize
+  // Atomically lock to prevent double finalization
+  const lockResult = await pool.query(
+    `UPDATE video_groups SET status = 'finalizing' WHERE id = $1 AND status = 'pending' RETURNING id`,
+    [groupId],
+  );
+  if (lockResult.rows.length === 0) return;
+
+  try {
+    // Get video URLs in segment order
+    const videoUrls = segments
+      .sort((a, b) => a.segment_index - b.segment_index)
+      .map(s => {
+        const output = typeof s.output === 'string' ? JSON.parse(s.output) : s.output;
+        return output?.video_url;
+      })
+      .filter(Boolean);
+
+    if (videoUrls.length !== segments.length) {
+      throw new Error('Missing video URLs for some segments');
+    }
+
+    let finalUrl;
+    if (videoUrls.length === 1) {
+      // Single segment → no concat needed
+      finalUrl = videoUrls[0];
+    } else {
+      // Concat via FFmpeg
+      const { concatVideos } = await import('./concat.js');
+      const resultBuffer = await concatVideos(videoUrls);
+
+      // Upload to S3
+      const { uploadBuffer } = await import('./storage.js');
+      const key = `projects/${group.project_id}/long-${Date.now()}.mp4`;
+      finalUrl = await uploadBuffer({ buffer: resultBuffer, key, contentType: 'video/mp4' });
+      console.log(`[Group] ${groupId}: concat uploaded to ${finalUrl}`);
+    }
+
+    // Update project
+    const projRow = await pool.query('SELECT brief FROM projects WHERE id = $1', [group.project_id]);
+    if (projRow.rows.length > 0) {
+      const brief = typeof projRow.rows[0].brief === 'string'
+        ? JSON.parse(projRow.rows[0].brief) : projRow.rows[0].brief;
+      await pool.query(
+        `UPDATE projects SET brief = $1, result_url = $2, status = 'ready' WHERE id = $3`,
+        [JSON.stringify({ ...brief, video_url: finalUrl, target_duration: group.target_duration }), finalUrl, group.project_id],
+      );
+    }
+
+    await pool.query(`UPDATE video_groups SET status = 'ready' WHERE id = $1`, [groupId]);
+    console.log(`[Group] ${groupId}: finalized OK, ${videoUrls.length} segments → ${finalUrl}`);
+  } catch (err) {
+    console.error(`[Group] ${groupId}: finalization error:`, err);
+    // Finalization failed (concat error) → fail the group, refund everything
+    await pool.query(`UPDATE video_groups SET status = 'failed' WHERE id = $1`, [groupId]);
+    await failGroupInternal(groupId, group, segments);
+  }
+}
+
+async function failGroupInternal(groupId, group, segments) {
+  await pool.query(
+    `UPDATE video_groups SET status = 'failed' WHERE id = $1 AND status != 'failed'`,
+    [groupId],
+  );
+
+  // Refund all done segments that haven't been refunded
+  for (const seg of segments) {
+    if (seg.status === 'done' && !seg.refunded && seg.cost_credits > 0) {
+      await pool.query('UPDATE users SET credits = credits + $1 WHERE id = $2', [seg.cost_credits, seg.user_id]);
+      await pool.query('UPDATE generation_jobs SET refunded = TRUE WHERE id = $1', [seg.id]);
+      console.log(`[Group] ${groupId}: refunded ${seg.cost_credits} for done segment ${seg.id}`);
+    }
+  }
+
+  // Update project status
+  await pool.query(
+    `UPDATE projects SET status = 'error' WHERE id = $1 AND status != 'ready'`,
+    [group.project_id],
+  );
+  console.log(`[Group] ${groupId}: marked as failed, refunds processed`);
+}
+
 // ── Job runner ──
 
 async function runJob(jobId) {
@@ -163,8 +392,22 @@ async function runJob(jobId) {
       }
     }
 
-    // Save result URL to project
-    if (result.video_url || result.image_url) {
+    // Mark job as done
+    await pool.query(
+      `UPDATE generation_jobs SET status = 'done', progress = 100, output = $1, updated_at = NOW() WHERE id = $2`,
+      [JSON.stringify(result), jobId],
+    );
+
+    // Check if this is a group segment
+    const jobMeta = await pool.query('SELECT group_id FROM generation_jobs WHERE id = $1', [jobId]);
+    const groupId = jobMeta.rows[0]?.group_id;
+
+    if (groupId) {
+      // Group segment: don't update project, trigger group finalizer
+      console.log(`[Group] Segment ${jobId} done (group ${groupId})`);
+      setImmediate(() => tryFinalizeGroup(groupId));
+    } else if (result.video_url || result.image_url) {
+      // Normal (non-group) job: update project
       try {
         const projRow = await pool.query('SELECT brief FROM projects WHERE id = $1', [project_id]);
         if (projRow.rows.length > 0) {
@@ -188,11 +431,6 @@ async function runJob(jobId) {
         console.error(`Job ${jobId}: failed to update project:`, e.message);
       }
     }
-
-    await pool.query(
-      `UPDATE generation_jobs SET status = 'done', progress = 100, output = $1, updated_at = NOW() WHERE id = $2`,
-      [JSON.stringify(result), jobId],
-    );
   } catch (err) {
     console.error(`Job ${jobId} unhandled error:`, err);
     try {
@@ -232,6 +470,7 @@ async function runAnimate(input, jobId, seed, projectId) {
     modelKey: input.modelKey,
     motionPrompt: input.motionPrompt,
     seed,
+    durationSec: input.durationSec,
   });
 
   // Step 2: Save fal_request_id IMMEDIATELY (before polling)
@@ -380,6 +619,12 @@ async function failJob(jobId, userId, costCredits, errorMsg, shouldRefund = true
 
   // Mark as refunded
   await pool.query('UPDATE generation_jobs SET refunded = TRUE WHERE id = $1', [jobId]);
+
+  // If group segment failed, trigger group check
+  const groupCheck = await pool.query('SELECT group_id FROM generation_jobs WHERE id = $1', [jobId]);
+  if (groupCheck.rows[0]?.group_id) {
+    setImmediate(() => tryFinalizeGroup(groupCheck.rows[0].group_id));
+  }
 }
 
 // ── Watchdog (legacy — marks truly stale jobs) ──
@@ -406,7 +651,7 @@ export async function runWatchdog() {
 export async function runReconciler() {
   try {
     const orphans = await pool.query(
-      `SELECT id, type, user_id, project_id, cost_credits, input, seed, fal_request_id
+      `SELECT id, type, user_id, project_id, cost_credits, input, seed, fal_request_id, group_id
        FROM generation_jobs
        WHERE status IN ('pending','running')
          AND fal_request_id IS NOT NULL
@@ -480,18 +725,21 @@ export async function runReconciler() {
               });
               output = { video_url: result.video_url, fal_seed: result.fal_seed };
 
-              try {
-                const projRow = await pool.query('SELECT brief FROM projects WHERE id = $1', [row.project_id]);
-                if (projRow.rows.length > 0) {
-                  const brief = typeof projRow.rows[0].brief === 'string'
-                    ? JSON.parse(projRow.rows[0].brief) : projRow.rows[0].brief;
-                  await pool.query(
-                    `UPDATE projects SET brief = $1, result_url = $2, status = 'ready' WHERE id = $3`,
-                    [JSON.stringify({ ...brief, video_url: result.video_url, seed: row.seed }), result.video_url, row.project_id],
-                  );
+              // Only update project for non-group jobs
+              if (!row.group_id) {
+                try {
+                  const projRow = await pool.query('SELECT brief FROM projects WHERE id = $1', [row.project_id]);
+                  if (projRow.rows.length > 0) {
+                    const brief = typeof projRow.rows[0].brief === 'string'
+                      ? JSON.parse(projRow.rows[0].brief) : projRow.rows[0].brief;
+                    await pool.query(
+                      `UPDATE projects SET brief = $1, result_url = $2, status = 'ready' WHERE id = $3`,
+                      [JSON.stringify({ ...brief, video_url: result.video_url, seed: row.seed }), result.video_url, row.project_id],
+                    );
+                  }
+                } catch (e) {
+                  console.error(`[Reconciler] Job ${row.id}: project update failed:`, e.message);
                 }
-              } catch (e) {
-                console.error(`[Reconciler] Job ${row.id}: project update failed:`, e.message);
               }
             }
 
@@ -500,6 +748,12 @@ export async function runReconciler() {
               [JSON.stringify(output), row.id],
             );
             console.log(`[Reconciler] Job ${row.id}: finalized (COMPLETED)`);
+
+            // Trigger group finalization if needed
+            if (row.group_id) {
+              console.log(`[Reconciler] Segment ${row.id} done (group ${row.group_id}), triggering finalizer`);
+              setImmediate(() => tryFinalizeGroup(row.group_id));
+            }
           } catch (uploadErr) {
             console.error(`[Reconciler] Job ${row.id}: S3 upload failed, will retry:`, uploadErr.message);
           }

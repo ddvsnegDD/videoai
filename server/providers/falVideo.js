@@ -46,7 +46,7 @@ function ensureConfig() {
  * Submit to fal queue. Returns { request_id }.
  * Does NOT poll — caller saves request_id to DB first.
  */
-export async function submitToFal({ imageUrl, modelKey, motionPrompt, seed }) {
+export async function submitToFal({ imageUrl, modelKey, motionPrompt, seed, durationSec }) {
   ensureConfig();
   const model = VIDEO_MODELS[modelKey];
   if (!model) throw makeError('INVALID_INPUT', `Unknown model: ${modelKey}`);
@@ -58,7 +58,7 @@ export async function submitToFal({ imageUrl, modelKey, motionPrompt, seed }) {
     submitInput = {
       image_url: imageUrl,
       prompt: promptText,
-      duration: '5',
+      duration: durationSec || '5',
       negative_prompt: 'blur, distort, low quality, warped text, distorted lettering, deformed logo',
       cfg_scale: 0.5,
     };

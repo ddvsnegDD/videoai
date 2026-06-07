@@ -9,7 +9,7 @@ import {
 import { C } from '../lib/theme';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { useJobPolling } from '../lib/hooks';
+import { useJobPolling, useGroupPolling } from '../lib/hooks';
 
 const glassPanel = {
   background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(20px)',
@@ -61,11 +61,14 @@ export default function EditorPage() {
   const [motion, setMotion] = useState('push_in');
   const [customPrompt, setCustomPrompt] = useState('');
   const [model, setModel] = useState('wan');
+  const [targetDuration, setTargetDuration] = useState(5);
   const [projectId, setProjectId] = useState(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const [jobId, setJobId] = useState(null);
   const { job } = useJobPolling(jobId);
+  const [groupId, setGroupId] = useState(null);
+  const { group } = useGroupPolling(groupId);
 
   // Regen confirmation
   const [showRegenConfirm, setShowRegenConfirm] = useState(false);
@@ -75,10 +78,13 @@ export default function EditorPage() {
     api.get('/config').then(setConfig).catch(() => {});
   }, []);
 
-  // Refresh credits on job completion
+  // Refresh credits on job/group completion
   useEffect(() => {
     if (job?.status === 'done' || job?.status === 'failed') refresh();
   }, [job?.status]);
+  useEffect(() => {
+    if (group?.status === 'ready' || group?.status === 'failed') refresh();
+  }, [group?.status]);
 
   // When image job completes
   useEffect(() => {
@@ -96,16 +102,20 @@ export default function EditorPage() {
   const freeWan = user?.free_wan ?? 0;
   const freeVeo = user?.free_veo ?? 0;
   const freeImage = user?.free_image ?? 0;
-  const modelCredits = config?.video_models?.[model]?.credits ?? (model === 'wan' ? 40 : 90);
+  const modelCredits = model === 'wan' ? targetDuration * 8 : (config?.video_models?.veo?.credits ?? 90);
   const creditsImage = config?.credits_image ?? 13;
-  const isFree = (model === 'wan' && freeWan > 0) || (model === 'veo' && freeVeo > 0);
+  const isFree = (model === 'wan' && targetDuration === 5 && freeWan > 0) || (model === 'veo' && freeVeo > 0);
   const isFreeImage = freeImage > 0;
   const canAfford = isFree || credits >= modelCredits;
   const canAffordImage = isFreeImage || credits >= creditsImage;
 
   // Derive phase for the monitor
   let phase; // 'idle' | 'uploading' | 'generating_image' | 'confirm_image' | 'ready' | 'running' | 'done' | 'failed'
-  if (jobId) {
+  if (groupId) {
+    if (group?.status === 'ready') phase = 'done';
+    else if (group?.status === 'failed') phase = 'failed';
+    else phase = 'running';
+  } else if (jobId) {
     if (job?.status === 'done') phase = 'done';
     else if (job?.status === 'failed') phase = 'failed';
     else phase = 'running';
@@ -123,7 +133,7 @@ export default function EditorPage() {
     phase = 'idle';
   }
 
-  const videoUrl = job?.output?.video_url;
+  const videoUrl = group?.video_url || job?.output?.video_url;
 
   // ── Handlers ──
 
@@ -258,11 +268,16 @@ export default function EditorPage() {
         input: {
           imageUrl,
           modelKey: model,
+          targetDuration: model === 'wan' ? targetDuration : undefined,
           motionPrompt: customPrompt.trim() || undefined,
           motionKey: motion,
         },
       });
-      setJobId(res.jobId);
+      if (res.groupId) {
+        setGroupId(res.groupId);
+      } else {
+        setJobId(res.jobId);
+      }
       refresh();
     } catch (err) {
       if (err.data?.error === 'INSUFFICIENT_CREDITS') {
@@ -279,6 +294,7 @@ export default function EditorPage() {
 
   function handleReset() {
     setJobId(null);
+    setGroupId(null);
     setImageJobId(null);
     setImageUrl(null);
     setImageSource(null);
@@ -434,8 +450,8 @@ export default function EditorPage() {
             <div style={{ display: 'flex', gap: 14 }}>
               <ModelCard on={model === 'wan'} onClick={() => setModel('wan')}
                 name="Эконом · Kling 2.5"
-                desc="Клип 5 секунд. Максимально жёсткое удержание мелкого шрифта и геометрии товара."
-                cost={freeWan > 0 ? `${freeWan} бесплатно` : `${config?.video_models?.wan?.credits ?? 40} кредитов`}
+                desc={`Клип ${targetDuration} сек.${targetDuration >= 15 ? ' Склейка из нескольких сцен.' : ''} Жёсткое удержание шрифта и геометрии товара.`}
+                cost={isFree ? `${freeWan} бесплатно` : `${modelCredits} кредитов`}
                 accent={C.primary} accentLight={C.primaryLight} accentDark={C.primaryDark} />
               <ModelCard on={model === 'veo'} onClick={() => setModel('veo')}
                 name="Премиум · Veo 3.1"
@@ -443,6 +459,39 @@ export default function EditorPage() {
                 cost={freeVeo > 0 ? `${freeVeo} бесплатно` : `${config?.video_models?.veo?.credits ?? 90} кредитов`}
                 accent="#6366F1" accentLight="#EEF2FF" accentDark="#4F46E5" />
             </div>
+
+            {/* Duration selector for Kling */}
+            {model === 'wan' && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.dark, marginBottom: 8 }}>Длительность клипа</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {[5, 10, 15, 20].map(d => {
+                    const on = targetDuration === d;
+                    const dCredits = d * 8;
+                    const dFree = d === 5 && freeWan > 0;
+                    return (
+                      <button key={d} onClick={() => setTargetDuration(d)} style={{
+                        flex: 1, border: on ? `2px solid ${C.primary}` : '1px solid #E2EAE6',
+                        borderRadius: 10, padding: '10px 4px', cursor: 'pointer',
+                        background: on ? C.primaryLight : '#fff', textAlign: 'center',
+                        transition: 'all 0.15s ease',
+                      }}>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: C.dark }}>{d}с</div>
+                        <div style={{ fontSize: 11, color: dFree ? C.primary : '#6B7F74', fontWeight: 600, marginTop: 2 }}>
+                          {dFree ? 'бесплатно' : `${dCredits} кр.`}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {targetDuration >= 15 && (
+                  <div style={{ display: 'flex', gap: 8, background: '#FFF4E8', border: '1px solid #FBD9AE', padding: '8px 12px', borderRadius: 8, fontSize: 12, color: '#8A5A18', lineHeight: 1.4, marginTop: 8 }}>
+                    <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                    <span>Склейка из нескольких сцен — на стыках возможна смена плана.</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, fontSize: 13, color: '#6B7F74' }}>
               <span>{isFree ? <strong style={{ color: C.primary }}>Бесплатно (пробная генерация)</strong> : `Стоимость: ${modelCredits} кр. · Баланс: ${credits}`}</span>
@@ -464,7 +513,7 @@ export default function EditorPage() {
               {creating ? (
                 <><Loader size={18} style={{ animation: 'va-spin 1s linear infinite' }} /> Создаём...</>
               ) : (
-                <><Sparkles size={18} /> Сгенерировать рекламный клип</>
+                <><Sparkles size={18} /> {isFree ? 'Сгенерировать бесплатно' : `Сгенерировать за ${modelCredits} кр.`}</>
               )}
             </button>
           </div>
@@ -572,30 +621,41 @@ export default function EditorPage() {
             )}
 
             {/* RUNNING (video) */}
-            {phase === 'running' && (
-              <div style={{ width: '100%', padding: 20, boxSizing: 'border-box' }}>
-                <div style={{ textAlign: 'center', marginBottom: 22 }}>
-                  <Loader size={30} color={C.primary} style={{ animation: 'va-spin 1s linear infinite', marginBottom: 12 }} />
-                  <div style={{ fontWeight: 700, fontSize: 15, color: C.dark }}>
-                    {job?.status === 'pending' ? 'В очереди...' : 'Оживляю ваш товар...'}
+            {phase === 'running' && (() => {
+              const progress = groupId ? (group?.progress || 0) : (job?.progress || 0);
+              const isGroupRun = !!groupId;
+              const statusText = isGroupRun
+                ? (group?.status === 'finalizing' ? 'Склеиваю ролик...' : 'Оживляю ваш товар...')
+                : (job?.status === 'pending' ? 'В очереди...' : 'Оживляю ваш товар...');
+              const doneSegs = group?.segments?.filter(s => s.status === 'done').length || 0;
+              const totalSegs = group?.segments_count || 0;
+              return (
+                <div style={{ width: '100%', padding: 20, boxSizing: 'border-box' }}>
+                  <div style={{ textAlign: 'center', marginBottom: 22 }}>
+                    <Loader size={30} color={C.primary} style={{ animation: 'va-spin 1s linear infinite', marginBottom: 12 }} />
+                    <div style={{ fontWeight: 700, fontSize: 15, color: C.dark }}>{statusText}</div>
+                    <div style={{ fontSize: 12.5, color: '#6B7F74', marginTop: 4 }}>
+                      {isGroupRun && totalSegs > 1
+                        ? `${doneSegs} из ${totalSegs} сцен готово · обычно 3–5 минут`
+                        : `Обычно занимает 1–3 минуты`}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 12.5, color: '#6B7F74', marginTop: 4 }}>Обычно занимает 1–3 минуты</div>
+                  <div style={{ width: '100%', height: 6, background: '#E2E8F0', borderRadius: 10, overflow: 'hidden' }}>
+                    <div style={{ width: `${Math.max(progress, 5)}%`, height: '100%', background: `linear-gradient(90deg, ${C.primary}, ${C.primaryDark})`, borderRadius: 10, transition: 'width .35s ease' }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#6B7F74', marginTop: 8 }}>
+                    <span>Статус: {isGroupRun ? (group?.status === 'finalizing' ? 'склейка' : 'рендеринг') : (job?.status === 'pending' ? 'в очереди' : 'рендеринг')}...</span>
+                    <span>{progress}%</span>
+                  </div>
                 </div>
-                <div style={{ width: '100%', height: 6, background: '#E2E8F0', borderRadius: 10, overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.max(job?.progress || 0, job?.status === 'running' ? 5 : 0)}%`, height: '100%', background: `linear-gradient(90deg, ${C.primary}, ${C.primaryDark})`, borderRadius: 10, transition: 'width .35s ease' }} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#6B7F74', marginTop: 8 }}>
-                  <span>Статус: {job?.status === 'pending' ? 'в очереди' : 'рендеринг'}...</span>
-                  <span>{job?.progress || 0}%</span>
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* FAILED (video) */}
             {phase === 'failed' && (
               <div style={{ textAlign: 'center', padding: 20 }}>
                 <p style={{ color: C.danger, fontWeight: 600, marginBottom: 8 }}>Ошибка генерации видео</p>
-                <p style={{ color: '#6B7F74', fontSize: 13, marginBottom: 16 }}>{job?.error || 'Неизвестная ошибка'}</p>
+                <p style={{ color: '#6B7F74', fontSize: 13, marginBottom: 16 }}>{groupId ? 'Кредиты возвращены на баланс.' : (job?.error || 'Неизвестная ошибка')}</p>
                 <button onClick={handleReset} style={{ background: '#F1F5F9', border: 'none', padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 600, color: C.dark, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <RefreshCw size={14} /> Попробовать снова
                 </button>
@@ -607,7 +667,7 @@ export default function EditorPage() {
               <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ position: 'relative', width: '100%', aspectRatio: '9 / 16', maxHeight: 400, borderRadius: 12, overflow: 'hidden', background: '#000', margin: '0 auto 16px' }}>
                   <video src={videoUrl} controls autoPlay loop muted playsInline style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                  <div style={{ position: 'absolute', top: 12, left: 12, background: 'rgba(0,0,0,0.62)', color: '#fff', padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>{model === 'veo' ? 'Veo 3.1 · 8s' : 'Kling 2.5 · 5s'}</div>
+                  <div style={{ position: 'absolute', top: 12, left: 12, background: 'rgba(0,0,0,0.62)', color: '#fff', padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>{model === 'veo' ? 'Veo 3.1 · 8s' : `Kling 2.5 · ${targetDuration}s`}</div>
                 </div>
                 <a href={videoUrl} download target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
                   <button style={{ width: '100%', border: 'none', background: C.dark, color: '#fff', padding: 14, borderRadius: 11, fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Download size={16} /> Скачать готовый креатив (MP4)</button>
