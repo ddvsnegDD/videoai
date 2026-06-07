@@ -385,19 +385,6 @@ function FooterCTA() {
           </div>
         </div>
       </section>
-      <footer style={{ background: '#0A1F16', color: 'rgba(255,255,255,0.55)' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '34px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 20, flexWrap: 'wrap', fontSize: 13.5 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 26, height: 26, borderRadius: 7, background: grad, display: 'grid', placeItems: 'center' }}><Play size={11} color="#fff" fill="#fff" style={{ marginLeft: 1 }} /></div>
-            <span style={{ fontFamily: '"Manrope", sans-serif', fontWeight: 800, fontSize: 16, color: '#fff' }}>VideoAI</span>
-            <span style={{ marginLeft: 8 }}>© 2026 · ddvideoai.ru</span>
-          </div>
-          <div style={{ display: 'flex', gap: 24 }}>
-            <a href="#" style={{ color: 'inherit', textDecoration: 'none' }}>Политика конфиденциальности</a>
-            <a href="#" style={{ color: 'inherit', textDecoration: 'none' }}>Публичная оферта</a>
-          </div>
-        </div>
-      </footer>
     </>
   );
 }
