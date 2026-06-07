@@ -72,21 +72,6 @@ export async function initDB() {
     ALTER TABLE generation_jobs ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
     ALTER TABLE generation_jobs ADD COLUMN IF NOT EXISTS refunded BOOLEAN DEFAULT FALSE;
 
-    -- Long video: group segments
-    ALTER TABLE generation_jobs ADD COLUMN IF NOT EXISTS group_id UUID;
-    ALTER TABLE generation_jobs ADD COLUMN IF NOT EXISTS segment_index INTEGER;
-    ALTER TABLE generation_jobs ADD COLUMN IF NOT EXISTS segment_duration TEXT;
-
-    CREATE TABLE IF NOT EXISTS video_groups (
-      id UUID PRIMARY KEY,
-      project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
-      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      target_duration INTEGER NOT NULL,
-      segments_count INTEGER NOT NULL,
-      status TEXT DEFAULT 'pending',
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    );
-
     -- Sprint 6: payments
     CREATE TABLE IF NOT EXISTS payments (
       id SERIAL PRIMARY KEY,
@@ -123,6 +108,12 @@ export async function initDB() {
     ON payments (operation_id)
     WHERE operation_id IS NOT NULL
   `).catch(() => {});
+
+  // Cleanup: drop Phase 1 group entities (safe — columns/table may not exist)
+  await pool.query(`DROP TABLE IF EXISTS video_groups`).catch(() => {});
+  await pool.query(`ALTER TABLE generation_jobs DROP COLUMN IF EXISTS group_id`).catch(() => {});
+  await pool.query(`ALTER TABLE generation_jobs DROP COLUMN IF EXISTS segment_index`).catch(() => {});
+  await pool.query(`ALTER TABLE generation_jobs DROP COLUMN IF EXISTS segment_duration`).catch(() => {});
 
   console.log('DB tables ready');
 }

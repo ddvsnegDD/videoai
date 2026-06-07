@@ -9,7 +9,7 @@ import {
 import { C } from '../lib/theme';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { useJobPolling, useGroupPolling } from '../lib/hooks';
+import { useJobPolling } from '../lib/hooks';
 
 const glassPanel = {
   background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(20px)',
@@ -20,7 +20,10 @@ const glassPanel = {
 const MOTIONS = [
   { id: 'push_in', name: 'Мягкий наезд', desc: 'Плавное приближение к лицевой части' },
   { id: 'pan', name: 'Панорама', desc: 'Линейный сдвиг кадра по горизонту' },
-  { id: 'float', name: 'Игра света', desc: 'Минимум движения, акцент на бликах' },
+  { id: 'orbit', name: 'Облёт', desc: 'Камера плавно облетает вокруг товара' },
+  { id: 'pull_back', name: 'Отъезд', desc: 'Плавное удаление от товара' },
+  { id: 'tilt', name: 'Подъём', desc: 'Вертикальное движение камеры снизу вверх' },
+  { id: 'light_play', name: 'Игра света', desc: 'Минимум движения, акцент на бликах' },
 ];
 
 function ModelCard({ on, onClick, name, desc, cost, accent, accentLight, accentDark }) {
@@ -67,8 +70,6 @@ export default function EditorPage() {
   const [error, setError] = useState('');
   const [jobId, setJobId] = useState(null);
   const { job } = useJobPolling(jobId);
-  const [groupId, setGroupId] = useState(null);
-  const { group } = useGroupPolling(groupId);
 
   // Regen confirmation
   const [showRegenConfirm, setShowRegenConfirm] = useState(false);
@@ -78,13 +79,19 @@ export default function EditorPage() {
     api.get('/config').then(setConfig).catch(() => {});
   }, []);
 
-  // Refresh credits on job/group completion
+  // Auto-rotate motion preset based on completed animate jobs count
+  useEffect(() => {
+    api.get('/jobs').then(res => {
+      const jobs = res.jobs || res || [];
+      const doneCount = jobs.filter(j => j.type === 'animate' && j.status === 'done').length;
+      setMotion(MOTIONS[doneCount % MOTIONS.length].id);
+    }).catch(() => {});
+  }, []);
+
+  // Refresh credits on job completion
   useEffect(() => {
     if (job?.status === 'done' || job?.status === 'failed') refresh();
   }, [job?.status]);
-  useEffect(() => {
-    if (group?.status === 'ready' || group?.status === 'failed') refresh();
-  }, [group?.status]);
 
   // When image job completes
   useEffect(() => {
@@ -111,11 +118,7 @@ export default function EditorPage() {
 
   // Derive phase for the monitor
   let phase; // 'idle' | 'uploading' | 'generating_image' | 'confirm_image' | 'ready' | 'running' | 'done' | 'failed'
-  if (groupId) {
-    if (group?.status === 'ready') phase = 'done';
-    else if (group?.status === 'failed') phase = 'failed';
-    else phase = 'running';
-  } else if (jobId) {
+  if (jobId) {
     if (job?.status === 'done') phase = 'done';
     else if (job?.status === 'failed') phase = 'failed';
     else phase = 'running';
@@ -133,7 +136,7 @@ export default function EditorPage() {
     phase = 'idle';
   }
 
-  const videoUrl = group?.video_url || job?.output?.video_url;
+  const videoUrl = job?.output?.video_url;
 
   // ── Handlers ──
 
@@ -273,11 +276,7 @@ export default function EditorPage() {
           motionKey: motion,
         },
       });
-      if (res.groupId) {
-        setGroupId(res.groupId);
-      } else {
-        setJobId(res.jobId);
-      }
+      setJobId(res.jobId);
       refresh();
     } catch (err) {
       if (err.data?.error === 'INSUFFICIENT_CREDITS') {
@@ -294,7 +293,6 @@ export default function EditorPage() {
 
   function handleReset() {
     setJobId(null);
-    setGroupId(null);
     setImageJobId(null);
     setImageUrl(null);
     setImageSource(null);
@@ -450,7 +448,7 @@ export default function EditorPage() {
             <div style={{ display: 'flex', gap: 14 }}>
               <ModelCard on={model === 'wan'} onClick={() => setModel('wan')}
                 name="Эконом · Kling 2.5"
-                desc={`Клип ${targetDuration} сек.${targetDuration >= 15 ? ' Склейка из нескольких сцен.' : ''} Жёсткое удержание шрифта и геометрии товара.`}
+                desc={`Клип ${targetDuration} сек. Жёсткое удержание шрифта и геометрии товара.`}
                 cost={isFree ? `${freeWan} бесплатно` : `${modelCredits} кредитов`}
                 accent={C.primary} accentLight={C.primaryLight} accentDark={C.primaryDark} />
               <ModelCard on={model === 'veo'} onClick={() => setModel('veo')}
@@ -465,7 +463,7 @@ export default function EditorPage() {
               <div style={{ marginTop: 14 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.dark, marginBottom: 8 }}>Длительность клипа</div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  {[5, 10, 15, 20].map(d => {
+                  {[5, 10].map(d => {
                     const on = targetDuration === d;
                     const dCredits = d * 8;
                     const dFree = d === 5 && freeWan > 0;
@@ -484,12 +482,6 @@ export default function EditorPage() {
                     );
                   })}
                 </div>
-                {targetDuration >= 15 && (
-                  <div style={{ display: 'flex', gap: 8, background: '#FFF4E8', border: '1px solid #FBD9AE', padding: '8px 12px', borderRadius: 8, fontSize: 12, color: '#8A5A18', lineHeight: 1.4, marginTop: 8 }}>
-                    <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-                    <span>Склейка из нескольких сцен — на стыках возможна смена плана.</span>
-                  </div>
-                )}
               </div>
             )}
 
@@ -622,29 +614,20 @@ export default function EditorPage() {
 
             {/* RUNNING (video) */}
             {phase === 'running' && (() => {
-              const progress = groupId ? (group?.progress || 0) : (job?.progress || 0);
-              const isGroupRun = !!groupId;
-              const statusText = isGroupRun
-                ? (group?.status === 'finalizing' ? 'Склеиваю ролик...' : 'Оживляю ваш товар...')
-                : (job?.status === 'pending' ? 'В очереди...' : 'Оживляю ваш товар...');
-              const doneSegs = group?.segments?.filter(s => s.status === 'done').length || 0;
-              const totalSegs = group?.segments_count || 0;
+              const progress = job?.progress || 0;
+              const statusText = job?.status === 'pending' ? 'В очереди...' : 'Оживляю ваш товар...';
               return (
                 <div style={{ width: '100%', padding: 20, boxSizing: 'border-box' }}>
                   <div style={{ textAlign: 'center', marginBottom: 22 }}>
                     <Loader size={30} color={C.primary} style={{ animation: 'va-spin 1s linear infinite', marginBottom: 12 }} />
                     <div style={{ fontWeight: 700, fontSize: 15, color: C.dark }}>{statusText}</div>
-                    <div style={{ fontSize: 12.5, color: '#6B7F74', marginTop: 4 }}>
-                      {isGroupRun && totalSegs > 1
-                        ? `${doneSegs} из ${totalSegs} сцен готово · обычно 3–5 минут`
-                        : `Обычно занимает 1–3 минуты`}
-                    </div>
+                    <div style={{ fontSize: 12.5, color: '#6B7F74', marginTop: 4 }}>Обычно занимает 1–3 минуты</div>
                   </div>
                   <div style={{ width: '100%', height: 6, background: '#E2E8F0', borderRadius: 10, overflow: 'hidden' }}>
                     <div style={{ width: `${Math.max(progress, 5)}%`, height: '100%', background: `linear-gradient(90deg, ${C.primary}, ${C.primaryDark})`, borderRadius: 10, transition: 'width .35s ease' }} />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#6B7F74', marginTop: 8 }}>
-                    <span>Статус: {isGroupRun ? (group?.status === 'finalizing' ? 'склейка' : 'рендеринг') : (job?.status === 'pending' ? 'в очереди' : 'рендеринг')}...</span>
+                    <span>Статус: {job?.status === 'pending' ? 'в очереди' : 'рендеринг'}...</span>
                     <span>{progress}%</span>
                   </div>
                 </div>
@@ -655,7 +638,7 @@ export default function EditorPage() {
             {phase === 'failed' && (
               <div style={{ textAlign: 'center', padding: 20 }}>
                 <p style={{ color: C.danger, fontWeight: 600, marginBottom: 8 }}>Ошибка генерации видео</p>
-                <p style={{ color: '#6B7F74', fontSize: 13, marginBottom: 16 }}>{groupId ? 'Кредиты возвращены на баланс.' : (job?.error || 'Неизвестная ошибка')}</p>
+                <p style={{ color: '#6B7F74', fontSize: 13, marginBottom: 16 }}>{job?.error || 'Неизвестная ошибка'}</p>
                 <button onClick={handleReset} style={{ background: '#F1F5F9', border: 'none', padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 600, color: C.dark, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <RefreshCw size={14} /> Попробовать снова
                 </button>

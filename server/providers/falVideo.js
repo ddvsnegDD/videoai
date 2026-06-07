@@ -20,10 +20,12 @@ export const VIDEO_MODELS = {
 };
 
 export const MOTION_PRESETS = [
-  { key: 'push_in', label: 'Наезд камеры', prompt: 'slow cinematic camera push-in towards the product, subtle, premium commercial product video, smooth motion' },
-  { key: 'rotate', label: 'Поворот товара', prompt: 'slow elegant rotation of the product, soft light reflections moving, premium commercial product video' },
-  { key: 'orbit', label: 'Облёт вокруг', prompt: 'camera slowly orbits around the product, cinematic, soft lighting, premium commercial video' },
-  { key: 'float', label: 'Парение', prompt: 'product gently floating with subtle movement, soft light, premium commercial product video' },
+  { key: 'push_in', label: 'Мягкий наезд', prompt: 'slow cinematic camera push-in towards the product, subtle, premium commercial product video, smooth motion' },
+  { key: 'pan', label: 'Панорама', prompt: 'smooth horizontal camera pan across the product, premium commercial product video, steady motion' },
+  { key: 'orbit', label: 'Облёт', prompt: 'camera slowly orbits around the product, premium commercial product video, smooth controlled motion' },
+  { key: 'pull_back', label: 'Отъезд', prompt: 'slow cinematic camera pull-back revealing the product, premium commercial look, smooth motion' },
+  { key: 'tilt', label: 'Подъём', prompt: 'slow vertical camera tilt up the product, premium commercial product video, smooth motion' },
+  { key: 'light_play', label: 'Игра света', prompt: 'minimal camera movement, focus on shifting light and reflections on the product, premium commercial look' },
 ];
 
 export const POLL_TIMEOUT = 8 * 60 * 1000; // 8 min
@@ -129,9 +131,10 @@ export async function pollFal({ modelKey, requestId, onProgress, timeoutMs }) {
 }
 
 /**
- * Fetch result from fal for a completed request. Download video and re-upload to S3.
+ * Fetch the fal result URL. This is the critical step — if fal says COMPLETED,
+ * we MUST get the URL out. Throws only on real fal errors.
  */
-export async function fetchAndUpload({ modelKey, requestId, projectId }) {
+export async function fetchFalResult({ modelKey, requestId }) {
   ensureConfig();
   const model = VIDEO_MODELS[modelKey];
 
@@ -145,16 +148,39 @@ export async function fetchAndUpload({ modelKey, requestId, projectId }) {
     throw makeError('PROVIDER_ERROR', `No video URL in fal response: ${JSON.stringify(data).slice(0, 200)}`);
   }
 
-  const returnedSeed = data?.seed;
+  return { video_url: videoUrl, fal_seed: data?.seed };
+}
 
-  // Download and re-upload to S3
-  const videoRes = await fetch(videoUrl);
-  if (!videoRes.ok) throw makeError('PROVIDER_ERROR', `Failed to download video: ${videoRes.status}`);
-  const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
+/**
+ * Best-effort: download from fal URL and re-upload to S3.
+ * Never throws — returns { s3_url } on success, null on failure.
+ */
+export async function reuploadToS3({ falUrl, projectId }) {
+  try {
+    const videoRes = await fetch(falUrl);
+    if (!videoRes.ok) throw new Error(`Download failed: ${videoRes.status}`);
+    const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
 
-  const key = `projects/${projectId}/creative-${Date.now()}.mp4`;
-  const ourUrl = await uploadBuffer({ buffer: videoBuffer, key, contentType: 'video/mp4' });
-  console.log(`[fal] Uploaded to S3: ${ourUrl} (${videoBuffer.length} bytes)`);
+    const key = `projects/${projectId}/creative-${Date.now()}.mp4`;
+    const ourUrl = await uploadBuffer({ buffer: videoBuffer, key, contentType: 'video/mp4' });
+    console.log(`[fal] Uploaded to S3: ${ourUrl} (${videoBuffer.length} bytes)`);
+    return { s3_url: ourUrl };
+  } catch (err) {
+    console.error(`[Anti-leak] S3 re-upload failed (fal URL preserved): ${err.message}`);
+    return null;
+  }
+}
 
-  return { video_url: ourUrl, fal_seed: returnedSeed };
+/**
+ * Legacy wrapper — kept for reconciler compatibility.
+ * Calls fetchFalResult + reuploadToS3, returns video_url (S3 or fal fallback).
+ */
+export async function fetchAndUpload({ modelKey, requestId, projectId }) {
+  const falResult = await fetchFalResult({ modelKey, requestId });
+  const s3 = await reuploadToS3({ falUrl: falResult.video_url, projectId });
+  return {
+    video_url: s3?.s3_url || falResult.video_url,
+    fal_seed: falResult.fal_seed,
+    s3_fallback: !s3,
+  };
 }

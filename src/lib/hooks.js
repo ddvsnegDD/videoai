@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from './api.js';
 
 export function useJobPolling(jobId) {
@@ -53,52 +53,6 @@ export function useJobPolling(jobId) {
   }, [jobId]);
 
   return { job, loading, error };
-}
-
-export function useGroupPolling(groupId) {
-  const [group, setGroup] = useState(null);
-  const [loading, setLoading] = useState(!!groupId);
-  const activeRef = useRef(true);
-  const timerRef = useRef(null);
-
-  useEffect(() => {
-    activeRef.current = true;
-
-    if (!groupId) {
-      setGroup(null);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-
-    async function tick() {
-      if (!activeRef.current) return;
-      try {
-        const data = await api.get(`/groups/${groupId}`);
-        if (!activeRef.current) return;
-        setGroup(data.group);
-        setLoading(false);
-
-        if (data.group.status === 'pending' || data.group.status === 'finalizing') {
-          timerRef.current = setTimeout(tick, 3000);
-        }
-      } catch {
-        if (!activeRef.current) return;
-        setLoading(false);
-        timerRef.current = setTimeout(tick, 5000);
-      }
-    }
-
-    tick();
-
-    return () => {
-      activeRef.current = false;
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [groupId]);
-
-  return { group, loading };
 }
 
 export function useReveal() {

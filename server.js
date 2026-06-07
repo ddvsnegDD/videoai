@@ -4,7 +4,7 @@ import multer from 'multer';
 import { resolve, join } from 'path';
 import pool, { initDB } from './server/db.js';
 import { sendCode, verifyCode, requireAuth, getMe } from './server/auth.js';
-import { createJob, getJob, listJobs, runWatchdog, startReconciler, createSegmentGroup, getGroup } from './server/jobs.js';
+import { createJob, getJob, listJobs, runWatchdog, startReconciler } from './server/jobs.js';
 import { VIDEO_MODELS, MOTION_PRESETS } from './server/providers/falVideo.js';
 import { IMAGE_MODEL } from './server/providers/falImage.js';
 import { uploadBuffer, deleteByPrefix } from './server/storage.js';
@@ -380,26 +380,30 @@ app.post('/api/jobs', requireAuth, async (req, res) => {
       const model = VIDEO_MODELS[input.modelKey];
       if (!model) return res.status(400).json({ error: 'invalid_model' });
 
-      const targetDuration = input.modelKey === 'wan' ? (Number(input.targetDuration) || 5) : undefined;
+      if (input.modelKey === 'wan') {
+        // Kling: duration 5 or 10, both native single generations
+        const targetDuration = Number(input.targetDuration) || 5;
+        if (![5, 10].includes(targetDuration)) {
+          return res.status(400).json({ error: 'invalid_duration' });
+        }
 
-      // Validate duration for Kling
-      if (input.modelKey === 'wan' && ![5, 10, 15, 20].includes(targetDuration)) {
-        return res.status(400).json({ error: 'invalid_duration' });
-      }
+        const wanCredits = targetDuration * 8; // 5s=40, 10s=80
+        const userRow = await pool.query('SELECT free_wan FROM users WHERE id = $1', [req.userId]);
+        const hasFree = targetDuration === 5 && userRow.rows[0]?.free_wan > 0;
 
-      // Long Kling video (10/15/20s) → segment group
-      if (input.modelKey === 'wan' && targetDuration > 5) {
-        const { groupId } = await createSegmentGroup({
+        const { jobId } = await createJob({
           userId: req.userId,
           projectId,
-          targetDuration,
-          input: { ...input, projectId },
+          type,
+          input: { ...input, projectId, durationSec: String(targetDuration) },
+          costCredits: hasFree ? 0 : wanCredits,
+          freeColumn: hasFree ? 'free_wan' : null,
         });
-        return res.json({ groupId });
+        return res.json({ jobId });
       }
 
-      // Standard single-job flow (5s wan or veo)
-      const freeCol = input.modelKey === 'wan' ? 'free_wan' : 'free_veo';
+      // Veo: single job, fixed duration
+      const freeCol = 'free_veo';
       const userRow = await pool.query(`SELECT ${freeCol} FROM users WHERE id = $1`, [req.userId]);
       const hasFree = userRow.rows[0]?.[freeCol] > 0;
 
@@ -464,18 +468,6 @@ app.get('/api/jobs', requireAuth, async (req, res) => {
     res.json({ jobs });
   } catch (err) {
     console.error('list jobs error:', err);
-    res.status(500).json({ error: 'server_error' });
-  }
-});
-
-// ── Groups (long video) ──
-app.get('/api/groups/:id', requireAuth, async (req, res) => {
-  try {
-    const group = await getGroup(req.params.id, req.userId);
-    if (!group) return res.status(404).json({ error: 'not_found' });
-    res.json({ group });
-  } catch (err) {
-    console.error('get group error:', err);
     res.status(500).json({ error: 'server_error' });
   }
 });
