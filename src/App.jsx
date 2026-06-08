@@ -12,6 +12,7 @@ import EditorPage from './pages/EditorPage';
 import ProjectPage from './pages/ProjectPage';
 import BillingPage from './pages/BillingPage';
 import AdminPage from './pages/AdminPage';
+import PaymentResultPage from './pages/PaymentResultPage';
 import OfertaPage from './pages/OfertaPage';
 import PrivacyPage from './pages/PrivacyPage';
 import ConsentPage from './pages/ConsentPage';
@@ -81,6 +82,7 @@ export default function App() {
             <Route path="/editor" element={<ProtectedRoute><EditorPage /></ProtectedRoute>} />
             <Route path="/project/:id" element={<ProtectedRoute><ProjectPage /></ProtectedRoute>} />
             <Route path="/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
+            <Route path="/payment/result" element={<ProtectedRoute><PaymentResultPage /></ProtectedRoute>} />
 
             {/* Админка — только для ADMIN_EMAILS */}
             <Route

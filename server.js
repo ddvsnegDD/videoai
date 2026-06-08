@@ -536,33 +536,30 @@ app.get('/api/admin/jobs', requireAdmin, async (_req, res) => {
   }
 });
 
-// ── Payments ──
+// ── Payments (YooKassa v3) ──
 
-// POST /api/payments/create — returns Quickpay URL
+// POST /api/payments/create — creates YooKassa payment, returns confirmation URL
 app.post('/api/payments/create', requireAuth, async (req, res) => {
   try {
-    const { packageId, paymentType } = req.body;
+    const { packageId } = req.body;
     if (!packageId) return res.status(400).json({ error: 'missing_package_id' });
 
     const { getPackageById } = await import('./src/data/tariffs.js');
     const pkg = getPackageById(packageId);
     if (!pkg) return res.status(400).json({ error: 'invalid_package' });
 
-    const wallet = process.env.YOOMONEY_WALLET;
-    if (!wallet) return res.status(503).json({ error: 'payments_not_configured' });
+    const { createPayment } = await import('./server/payments.js');
+    const { confirmationUrl, paymentDbId } = await createPayment({
+      userId: req.userId,
+      pkg,
+    });
 
-    const { randomUUID } = await import('crypto');
-    const label = `${req.userId}:${pkg.id}:${randomUUID().slice(0, 8)}`;
-
-    const { createPendingPayment, buildQuickpayUrl } = await import('./server/payments.js');
-    await createPendingPayment({ userId: req.userId, pkg, label });
-
-    const successUrl = `${process.env.APP_URL || 'https://ddvideoai.ru'}/billing?paid=1`;
-    const url = buildQuickpayUrl({ wallet, pkg, label, successUrl, paymentType: paymentType || 'AC' });
-
-    res.json({ url, label });
+    res.json({ url: confirmationUrl, paymentId: paymentDbId });
   } catch (err) {
-    console.error('payments/create error:', err);
+    if (err.message === 'payments_not_configured') {
+      return res.status(503).json({ error: 'payments_not_configured' });
+    }
+    console.log('payments/create error:', err.message);
     res.status(500).json({ error: 'server_error' });
   }
 });
@@ -584,26 +581,51 @@ app.get('/api/payments/history', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/payments/yoomoney-webhook — YooMoney HTTP-notification
-// Must use urlencoded parser (not JSON)
+// POST /api/payments/yookassa/webhook — YooKassa JSON webhook
+app.post('/api/payments/yookassa/webhook', async (req, res) => {
+  try {
+    const { processWebhook } = await import('./server/payments.js');
+    const result = await processWebhook({ body: req.body });
+    console.log(`[YooKassa] Webhook result: ${result.reason}`);
+    res.sendStatus(200); // always 200 to YooKassa
+  } catch (err) {
+    console.log('[YooKassa] Webhook handler error:', err.message);
+    res.sendStatus(200); // always 200
+  }
+});
+
+// GET /api/payments/order/:id/status — frontend polls this after redirect
+app.get('/api/payments/order/:id/status', requireAuth, async (req, res) => {
+  try {
+    const paymentId = Number(req.params.id);
+    if (!paymentId) return res.status(400).json({ error: 'invalid_id' });
+
+    const { getPaymentStatus } = await import('./server/payments.js');
+    const payment = await getPaymentStatus(paymentId, req.userId);
+    if (!payment) return res.status(404).json({ error: 'not_found' });
+
+    res.json({ payment });
+  } catch (err) {
+    console.log('payments/order/status error:', err.message);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// POST /api/payments/yoomoney-webhook — legacy YooMoney (kept for transition)
 app.post(
   '/api/payments/yoomoney-webhook',
   express.urlencoded({ extended: false }),
   async (req, res) => {
     try {
       const secret = process.env.YOOMONEY_NOTIFICATION_SECRET;
-      if (!secret) {
-        console.error('[YooMoney] YOOMONEY_NOTIFICATION_SECRET not set');
-        return res.sendStatus(200); // always 200 to ЮMoney
-      }
-
+      if (!secret) return res.sendStatus(200);
       const { processYooMoneyWebhook } = await import('./server/payments.js');
       const result = await processYooMoneyWebhook({ params: req.body, secret });
       console.log(`[YooMoney] Webhook result: ${result.reason}`);
       res.sendStatus(200);
     } catch (err) {
-      console.error('[YooMoney] Webhook handler error:', err);
-      res.sendStatus(200); // always 200
+      console.log('[YooMoney] Webhook handler error:', err.message);
+      res.sendStatus(200);
     }
   },
 );
@@ -613,13 +635,60 @@ app.get('/api/admin/payments', requireAdmin, async (_req, res) => {
   try {
     const result = await pool.query(`
       SELECT p.id, u.email AS user_email, p.package_id, p.expected_amount, p.paid_amount,
-             p.credits_granted, p.status, p.operation_id, p.created_at, p.completed_at
+             p.credits_granted, p.status, p.provider, p.yookassa_payment_id, p.operation_id,
+             p.receipt_status, p.refunded, p.created_at, p.completed_at
       FROM payments p LEFT JOIN users u ON u.id = p.user_id
       ORDER BY p.created_at DESC LIMIT 100
     `);
     res.json({ payments: result.rows });
   } catch (err) {
-    console.error('admin payments error:', err);
+    console.log('admin payments error:', err.message);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// GET /api/admin/receipts — pending receipts for self-employed tracking
+app.get('/api/admin/receipts', requireAdmin, async (_req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT r.id, r.payment_id, r.user_email, r.amount, r.description,
+             r.status, r.attempts, r.last_error, r.created_at, r.completed_at
+      FROM pending_receipts r
+      ORDER BY r.created_at DESC LIMIT 100
+    `);
+    res.json({ receipts: result.rows });
+  } catch (err) {
+    console.log('admin receipts error:', err.message);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// PATCH /api/admin/receipts/:id — mark receipt as done/failed
+app.patch('/api/admin/receipts/:id', requireAdmin, async (req, res) => {
+  try {
+    const { status } = req.body; // 'completed' or 'failed'
+    if (!['completed', 'failed'].includes(status)) {
+      return res.status(400).json({ error: 'invalid_status' });
+    }
+    const result = await pool.query(
+      `UPDATE pending_receipts SET status = $1, completed_at = NOW()
+       WHERE id = $2 RETURNING id`,
+      [status, req.params.id],
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'not_found' });
+
+    // Update payment receipt_status too
+    const receipt = await pool.query('SELECT payment_id FROM pending_receipts WHERE id = $1', [req.params.id]);
+    if (receipt.rows[0]?.payment_id) {
+      await pool.query(
+        'UPDATE payments SET receipt_status = $1 WHERE id = $2',
+        [status === 'completed' ? 'sent' : 'failed', receipt.rows[0].payment_id],
+      );
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.log('admin receipts patch error:', err.message);
     res.status(500).json({ error: 'server_error' });
   }
 });
@@ -652,6 +721,15 @@ async function start() {
 
   setInterval(runWatchdog, 60000);
   startReconciler();
+
+  // Payment reconciler (checks stale pending payments via GET)
+  const { startPaymentReconciler } = await import('./server/payments.js');
+  if (process.env.YOOKASSA_SHOP_ID && process.env.YOOKASSA_SECRET_KEY) {
+    startPaymentReconciler();
+  } else {
+    console.log('[YooKassa] Payment reconciler skipped — credentials not configured');
+  }
+
   app.listen(PORT, () => console.log(`VideoAI server on port ${PORT}`));
 }
 

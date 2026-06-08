@@ -1,5 +1,5 @@
 // src/pages/BillingPage.jsx
-// Sprint C merge: новые 3 пакета + реальная оплата через ЮMoney
+// Sprint C merge: пакеты + оплата через ЮKassa
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Check, CreditCard, ShieldCheck, CheckCircle, Clock, AlertCircle } from 'lucide-react';
@@ -11,6 +11,7 @@ import { PACKAGES } from '../data/tariffs';
 const STATUS_MAP = {
   pending: { label: 'Ожидает', icon: Clock, color: C.gray400 },
   completed: { label: 'Оплачен', icon: CheckCircle, color: C.primary },
+  canceled: { label: 'Отменён', icon: AlertCircle, color: C.gray400 },
   mismatch: { label: 'Ошибка суммы', icon: AlertCircle, color: C.danger },
 };
 
@@ -38,6 +39,10 @@ export default function BillingPage() {
     setError('');
     try {
       const res = await api.post('/payments/create', { packageId: pkg.id });
+      // Save paymentId for polling on result page
+      if (res.paymentId) {
+        localStorage.setItem('lastPaymentId', String(res.paymentId));
+      }
       window.location.href = res.url;
     } catch (err) {
       setError(err.data?.error === 'payments_not_configured'
@@ -87,7 +92,7 @@ export default function BillingPage() {
             Выберите пакет видеокреативов
           </h1>
           <p style={{ fontSize: 16, color: C.gray600, maxWidth: 600, margin: '0 auto', lineHeight: 1.5 }}>
-            Покупайте готовые ролики для маркетплейсов. Оплата в рублях через ЮMoney, кредиты не сгорают и остаются на балансе навсегда.
+            Покупайте готовые ролики для маркетплейсов. Безопасная оплата картой или через СБП, кредиты не сгорают и остаются на балансе навсегда.
           </p>
           <p style={{ color: C.gray400, fontSize: 14, marginTop: 8 }}>
             Ваш баланс: <strong style={{ color: C.primary }}>{user?.credits ?? 0} кредитов</strong>
@@ -161,7 +166,7 @@ export default function BillingPage() {
           <div style={{ display: 'flex', gap: 12, background: 'rgba(255,255,255,0.4)', padding: 16, borderRadius: 14, border: '1px solid rgba(0,0,0,0.03)' }}>
             <CreditCard style={{ color: C.primary, flexShrink: 0 }} size={20} />
             <div style={{ fontSize: 13, lineHeight: 1.4, color: C.gray600 }}>
-              <strong>Безопасная оплата ЮMoney.</strong> Все платежи шифруются. Мы не храним данные ваших банковских карт. Автоматическое выставление чеков.
+              <strong>Безопасная оплата.</strong> Все платежи шифруются через ЮKassa. Мы не храним данные ваших банковских карт. Карты, СБП, электронные кошельки.
             </div>
           </div>
           <div style={{ display: 'flex', gap: 12, background: 'rgba(255,255,255,0.4)', padding: 16, borderRadius: 14, border: '1px solid rgba(0,0,0,0.03)' }}>
@@ -189,7 +194,7 @@ export default function BillingPage() {
         </section>
 
         <p style={{ color: C.gray300, fontSize: 12, marginTop: 40, lineHeight: 1.5, textAlign: 'center' }}>
-          Оплата через ЮMoney. Кредиты начисляются автоматически после подтверждения платежа. Не является публичной офертой.
+          Оплата через ЮKassa. Кредиты начисляются автоматически после подтверждения платежа. Не является публичной офертой.
         </p>
       </div>
     </div>

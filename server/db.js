@@ -93,6 +93,27 @@ export async function initDB() {
     ALTER TABLE payments ADD COLUMN IF NOT EXISTS operation_id TEXT;
     ALTER TABLE payments ADD COLUMN IF NOT EXISTS credits_granted INTEGER;
     ALTER TABLE payments ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+
+    -- YooKassa migration: new columns on payments
+    ALTER TABLE payments ADD COLUMN IF NOT EXISTS provider TEXT DEFAULT 'yoomoney';
+    ALTER TABLE payments ADD COLUMN IF NOT EXISTS yookassa_payment_id TEXT;
+    ALTER TABLE payments ADD COLUMN IF NOT EXISTS refunded BOOLEAN DEFAULT FALSE;
+    ALTER TABLE payments ADD COLUMN IF NOT EXISTS receipt_status TEXT DEFAULT 'not_needed';
+    ALTER TABLE payments ADD COLUMN IF NOT EXISTS idempotence_key TEXT;
+
+    -- Pending receipts queue (self-employed manual tracking)
+    CREATE TABLE IF NOT EXISTS pending_receipts (
+      id SERIAL PRIMARY KEY,
+      payment_id INTEGER REFERENCES payments(id),
+      user_email TEXT,
+      amount NUMERIC NOT NULL,
+      description TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      attempts INTEGER DEFAULT 0,
+      last_error TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      completed_at TIMESTAMPTZ
+    );
   `);
 
   // Partial unique index for dedup (only active jobs)
@@ -102,11 +123,18 @@ export async function initDB() {
     WHERE status IN ('pending','running') AND idempotency_key IS NOT NULL
   `).catch(() => {});
 
-  // Unique index on operation_id to prevent double-crediting
+  // Unique index on operation_id to prevent double-crediting (YooMoney legacy)
   await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS uniq_operation_id
     ON payments (operation_id)
     WHERE operation_id IS NOT NULL
+  `).catch(() => {});
+
+  // Unique index on yookassa_payment_id to prevent double-crediting (YooKassa)
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_yookassa_payment_id
+    ON payments (yookassa_payment_id)
+    WHERE yookassa_payment_id IS NOT NULL
   `).catch(() => {});
 
   // Cleanup: drop Phase 1 group entities (safe — columns/table may not exist)
