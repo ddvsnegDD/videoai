@@ -5,6 +5,7 @@ import { Sparkles, Shield } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { isAdmin } from '../lib/adminConfig';
 import { C } from '../lib/theme';
+import sbpCompactLight from '../assets/sbp/sbp-compact-light.png';
 
 function SiteFooter() {
   const year = new Date().getFullYear();
@@ -66,6 +67,26 @@ function SiteFooter() {
             >Согласие на обработку ПДн</Link>
           </div>
         </div>
+      </div>
+
+      {/* Платёжные знаки — единая высота --mark-h, gap ≥ 20px (НСПК) */}
+      <div style={{
+        maxWidth: 1280,
+        margin: '24px auto 0',
+        padding: '0 24px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 20,
+        flexWrap: 'wrap',
+      }}>
+        <img
+          src={sbpCompactLight}
+          alt="Система быстрых платежей (СБП)"
+          height={26}
+          style={{ height: 26, width: 'auto', display: 'block' }}
+          loading="lazy"
+          decoding="async"
+        />
       </div>
     </footer>
   );
