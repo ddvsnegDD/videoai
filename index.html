@@ -32,9 +32,21 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- BotHelp: виджет-кнопка мессенджеров -->
+    <script src="https://main.bothelp.io/w/widget-button.js" defer></script>
+    <!-- BotHelp: виджет-подписка (pop-up) -->
+    <script src="https://main.bothelp.io/w/widget-sub-button.js" defer></script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+
+    <!-- BotHelp: контейнер виджет-кнопки (вне #root — доступен до React-рендера) -->
+    <div
+      id="bh-widget-button-root"
+      data-bh-widget-id="2"
+      data-bh-customer-id="628217">
+    </div>
   </body>
 </html>
