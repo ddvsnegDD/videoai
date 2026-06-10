@@ -11,6 +11,7 @@ import DashboardPage from './pages/DashboardPage';
 import EditorPage from './pages/EditorPage';
 import ProjectPage from './pages/ProjectPage';
 import BillingPage from './pages/BillingPage';
+import LibraryPage from './pages/LibraryPage';
 import AdminPage from './pages/AdminPage';
 import PaymentResultPage from './pages/PaymentResultPage';
 import OfertaPage from './pages/OfertaPage';
@@ -81,6 +82,7 @@ export default function App() {
             <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
             <Route path="/editor" element={<ProtectedRoute><EditorPage /></ProtectedRoute>} />
             <Route path="/project/:id" element={<ProtectedRoute><ProjectPage /></ProtectedRoute>} />
+            <Route path="/library" element={<ProtectedRoute><LibraryPage /></ProtectedRoute>} />
             <Route path="/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
             <Route path="/payment/result" element={<ProtectedRoute><PaymentResultPage /></ProtectedRoute>} />
 

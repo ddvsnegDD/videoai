@@ -143,6 +143,20 @@ export async function initDB() {
   await pool.query(`ALTER TABLE generation_jobs DROP COLUMN IF EXISTS segment_index`).catch(() => {});
   await pool.query(`ALTER TABLE generation_jobs DROP COLUMN IF EXISTS segment_duration`).catch(() => {});
 
+  // B1: folders for clip library
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS folders (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      name VARCHAR(100) NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_folders_user ON folders(user_id)`).catch(() => {});
+  await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS folder_id INTEGER REFERENCES folders(id) ON DELETE SET NULL`).catch(() => {});
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id)`).catch(() => {});
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_projects_folder ON projects(folder_id)`).catch(() => {});
+
   console.log('DB tables ready');
 }
 

@@ -693,6 +693,134 @@ app.patch('/api/admin/receipts/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// ── Clips (library) ──
+
+app.get('/api/clips', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, title, brief, result_url, status, folder_id, created_at
+       FROM projects
+       WHERE user_id = $1 AND status = 'ready' AND (brief->>'video_url') IS NOT NULL
+       ORDER BY created_at DESC`,
+      [req.userId],
+    );
+    const clips = result.rows.map(r => {
+      const b = typeof r.brief === 'string' ? JSON.parse(r.brief) : (r.brief || {});
+      return {
+        id: r.id,
+        title: r.title,
+        video_url: b.video_url || r.result_url,
+        image_url: b.image_url || null,
+        model: b.model || 'wan',
+        folder_id: r.folder_id,
+        created_at: r.created_at,
+      };
+    });
+    res.json({ clips });
+  } catch (err) {
+    console.error('list clips error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.patch('/api/clips/:id', requireAuth, async (req, res) => {
+  try {
+    const clipId = Number(req.params.id);
+    const { folder_id } = req.body;
+    if (folder_id === undefined) return res.status(400).json({ error: 'missing_folder_id' });
+
+    const clip = await pool.query(
+      `SELECT id FROM projects WHERE id = $1 AND user_id = $2`,
+      [clipId, req.userId],
+    );
+    if (clip.rows.length === 0) return res.status(404).json({ error: 'not_found' });
+
+    if (folder_id !== null) {
+      const folder = await pool.query(
+        `SELECT id FROM folders WHERE id = $1 AND user_id = $2`,
+        [folder_id, req.userId],
+      );
+      if (folder.rows.length === 0) return res.status(404).json({ error: 'folder_not_found' });
+    }
+
+    await pool.query(`UPDATE projects SET folder_id = $1 WHERE id = $2`, [folder_id, clipId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('move clip error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// ── Folders ──
+
+app.get('/api/folders', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT f.id, f.name, f.created_at,
+              COUNT(p.id)::int AS clip_count
+       FROM folders f
+       LEFT JOIN projects p ON p.folder_id = f.id AND p.status = 'ready' AND (p.brief->>'video_url') IS NOT NULL
+       WHERE f.user_id = $1
+       GROUP BY f.id
+       ORDER BY f.created_at DESC`,
+      [req.userId],
+    );
+    res.json({ folders: result.rows });
+  } catch (err) {
+    console.error('list folders error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.post('/api/folders', requireAuth, async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'missing_name' });
+    const result = await pool.query(
+      `INSERT INTO folders (user_id, name) VALUES ($1, $2) RETURNING *`,
+      [req.userId, name.trim().slice(0, 100)],
+    );
+    res.json({ folder: result.rows[0] });
+  } catch (err) {
+    console.error('create folder error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.patch('/api/folders/:id', requireAuth, async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'missing_name' });
+    const result = await pool.query(
+      `UPDATE folders SET name = $1 WHERE id = $2 AND user_id = $3 RETURNING *`,
+      [name.trim().slice(0, 100), req.params.id, req.userId],
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'not_found' });
+    res.json({ folder: result.rows[0] });
+  } catch (err) {
+    console.error('rename folder error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.delete('/api/folders/:id', requireAuth, async (req, res) => {
+  try {
+    const folderId = Number(req.params.id);
+    const check = await pool.query(
+      `SELECT id FROM folders WHERE id = $1 AND user_id = $2`,
+      [folderId, req.userId],
+    );
+    if (check.rows.length === 0) return res.status(404).json({ error: 'not_found' });
+
+    await pool.query(`UPDATE projects SET folder_id = NULL WHERE folder_id = $1`, [folderId]);
+    await pool.query(`DELETE FROM folders WHERE id = $1`, [folderId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('delete folder error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
 // ── Static + SPA ──
 app.use(express.static(DIST));
 app.get('/{*splat}', (_req, res) => { res.sendFile(join(DIST, 'index.html')); });

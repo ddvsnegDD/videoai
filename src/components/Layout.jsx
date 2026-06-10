@@ -112,6 +112,7 @@ export default function Layout() {
 
   const navItems = [
     { to: '/dashboard', label: 'Проекты' },
+    { to: '/library', label: 'Библиотека' },
     { to: '/editor', label: 'Создать клип' },
     { to: '/billing', label: 'Тарифы' },
   ];
