@@ -51,13 +51,13 @@ function ClipCard({ clip, folders, onMoved }) {
       onMouseEnter={() => { setHovered(true); v.current?.play().catch(() => {}); }}
       onMouseLeave={() => { setHovered(false); if (v.current) { v.current.pause(); try { v.current.currentTime = 2.3; } catch {} } }}
       style={{
-        background: '#fff', borderRadius: 16, border: '1px solid #E2EAE6', overflow: 'hidden',
+        background: '#fff', borderRadius: 16, border: '1px solid #E2EAE6',
         boxShadow: hovered ? '0 8px 24px rgba(10,46,31,0.10)' : '0 4px 12px rgba(10,46,31,0.03)',
         position: 'relative', transition: 'box-shadow 0.2s ease, transform 0.2s ease',
         transform: hovered ? 'translateY(-2px)' : 'none',
       }}
     >
-      <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#0a1f16', display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
+      <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#0a1f16', display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: '16px 16px 0 0' }}>
         <video ref={v} src={clip.video_url} muted loop playsInline preload="auto" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
         <div style={{ position: 'relative', zIndex: 2, width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'grid', placeItems: 'center', color: C.dark, boxShadow: '0 4px 14px rgba(0,0,0,0.2)' }}>
           <Video size={16} fill="currentColor" style={{ marginLeft: 2 }} />

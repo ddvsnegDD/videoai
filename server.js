@@ -824,11 +824,21 @@ app.delete('/api/folders/:id', requireAuth, async (req, res) => {
 
 // ── Assemblies ──
 
-app.post('/api/assemblies', requireAuth, async (req, res) => {
+app.post('/api/assemblies', requireAuth, audioUpload.single('audio'), async (req, res) => {
   try {
-    const { clip_ids, canvas, audio } = req.body;
+    // clip_ids comes as JSON string from FormData (or as array from JSON body)
+    let clip_ids = req.body.clip_ids;
+    if (typeof clip_ids === 'string') {
+      try { clip_ids = JSON.parse(clip_ids); } catch { /* leave as-is */ }
+    }
+    const canvas = req.body.canvas;
 
     if (!clip_ids || !Array.isArray(clip_ids) || clip_ids.length === 0) {
+      return res.status(400).json({ error: 'no_clips', message: 'Выберите хотя бы один клип' });
+    }
+    // Ensure clip_ids are numbers
+    clip_ids = clip_ids.map(Number).filter(Boolean);
+    if (clip_ids.length === 0) {
       return res.status(400).json({ error: 'no_clips', message: 'Выберите хотя бы один клип' });
     }
     if (clip_ids.length > MAX_CLIPS) {
@@ -859,19 +869,39 @@ app.post('/api/assemblies', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'invalid_clips', message: `Клипы недоступны: ${invalid.join(', ')}` });
     }
 
-    // Handle audio upload (base64 in body for simplicity)
+    // Handle audio: multipart file upload (binary, no base64)
     let audioKey = null;
-    if (audio?.data && audio?.filename) {
-      const buf = Buffer.from(audio.data, 'base64');
-      if (buf.length > 20 * 1024 * 1024) {
-        return res.status(400).json({ error: 'audio_too_large', message: 'Аудио до 20 МБ' });
-      }
-      const ext = audio.filename.split('.').pop()?.toLowerCase() || 'mp3';
+    const audioFile = req.file; // from multer audioUpload.single('audio')
+    if (audioFile) {
+      const origName = audioFile.originalname || 'audio.mp3';
+      const ext = origName.split('.').pop()?.toLowerCase() || 'mp3';
       if (!['mp3', 'wav', 'm4a', 'aac', 'ogg'].includes(ext)) {
-        return res.status(400).json({ error: 'audio_format', message: 'Формат: mp3, wav, m4a' });
+        return res.status(400).json({ error: 'audio_format', message: 'Формат: mp3, wav, m4a, aac, ogg' });
       }
       audioKey = `tmp/assembly-audio/${req.userId}-${Date.now()}.${ext}`;
-      await uploadBuffer({ buffer: buf, key: audioKey, contentType: `audio/${ext}` });
+      await uploadBuffer({ buffer: audioFile.buffer, key: audioKey, contentType: audioFile.mimetype || `audio/${ext}` });
+      console.log(`[assembly] Audio uploaded: ${audioKey} (${audioFile.buffer.length} bytes)`);
+    }
+
+    // Legacy fallback: base64 in JSON body (for older clients)
+    if (!audioKey && req.body.audio) {
+      try {
+        const audio = typeof req.body.audio === 'string' ? JSON.parse(req.body.audio) : req.body.audio;
+        if (audio?.data && audio?.filename) {
+          const buf = Buffer.from(audio.data, 'base64');
+          if (buf.length > 20 * 1024 * 1024) {
+            return res.status(400).json({ error: 'audio_too_large', message: 'Аудио до 20 МБ' });
+          }
+          const ext = audio.filename.split('.').pop()?.toLowerCase() || 'mp3';
+          if (!['mp3', 'wav', 'm4a', 'aac', 'ogg'].includes(ext)) {
+            return res.status(400).json({ error: 'audio_format', message: 'Формат: mp3, wav, m4a' });
+          }
+          audioKey = `tmp/assembly-audio/${req.userId}-${Date.now()}.${ext}`;
+          await uploadBuffer({ buffer: buf, key: audioKey, contentType: `audio/${ext}` });
+        }
+      } catch (legacyErr) {
+        console.log(`[assembly] Legacy audio parse failed: ${legacyErr.message}`);
+      }
     }
 
     const result = await pool.query(
@@ -880,10 +910,17 @@ app.post('/api/assemblies', requireAuth, async (req, res) => {
       [req.userId, canvas, JSON.stringify(clip_ids), audioKey],
     );
 
-    console.log(`[assembly] Created #${result.rows[0].id} for user ${req.userId} (${clip_ids.length} clips, canvas=${canvas})`);
-    res.json({ assembly: result.rows[0] });
+    console.log(`[assembly] Created #${result.rows[0].id} for user ${req.userId} (${clip_ids.length} clips, canvas=${canvas}, audio=${!!audioKey})`);
+    res.json({ assembly: result.rows[0], audioReceived: !!audioKey });
   } catch (err) {
-    console.error('create assembly error:', err);
+    // Multer errors (file too large, wrong type)
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: 'audio_too_large', message: 'Аудиофайл слишком большой (максимум 20 МБ)' });
+    }
+    if (err.message === 'unsupported_audio_type') {
+      return res.status(400).json({ error: 'audio_format', message: 'Неподдерживаемый формат аудио. Используйте mp3, wav, m4a, aac, ogg.' });
+    }
+    console.log('create assembly error:', err.message);
     res.status(500).json({ error: 'server_error' });
   }
 });

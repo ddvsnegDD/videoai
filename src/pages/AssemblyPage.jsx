@@ -60,15 +60,24 @@ function OrderItem({ clip, index, onRemove, onDragStart, onDragOver, onDrop }) {
       onDragOver={e => { e.preventDefault(); onDragOver(e, index); }}
       onDrop={e => onDrop(e, index)}
       style={{
-        display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+        display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px',
         background: '#fff', borderRadius: 10, border: '1px solid #E2EAE6',
         cursor: 'grab', fontSize: 13, fontWeight: 600, color: C.dark,
       }}
     >
-      <GripVertical size={14} color={C.gray400} />
-      <span style={{ width: 22, height: 22, borderRadius: 6, background: C.primaryLight, display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 800, color: C.primaryDark }}>{index + 1}</span>
+      <GripVertical size={14} color={C.gray400} style={{ flexShrink: 0 }} />
+      <span style={{ width: 22, height: 22, borderRadius: 6, background: C.primaryLight, display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 800, color: C.primaryDark, flexShrink: 0 }}>{index + 1}</span>
+      <div style={{ width: 40, height: 30, borderRadius: 4, overflow: 'hidden', background: '#0a1f16', flexShrink: 0 }}>
+        {clip.image_url ? (
+          <img src={clip.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (
+          <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center' }}>
+            <Film size={12} color="#fff" />
+          </div>
+        )}
+      </div>
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{clip.title}</span>
-      <button onClick={() => onRemove(clip.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: C.gray400, padding: 0, display: 'grid' }}>
+      <button onClick={() => onRemove(clip.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: C.gray400, padding: 0, display: 'grid', flexShrink: 0 }}>
         <X size={14} />
       </button>
     </div>
@@ -162,20 +171,34 @@ export default function AssemblyPage() {
     setError('');
 
     try {
-      const body = {
-        clip_ids: selected.map(c => c.id),
-        canvas,
-      };
-
+      // Use FormData to send audio as binary (avoids stack overflow on large files)
+      const fd = new FormData();
+      fd.append('clip_ids', JSON.stringify(selected.map(c => c.id)));
+      fd.append('canvas', canvas);
       if (audioFile) {
-        const buf = await audioFile.arrayBuffer();
-        body.audio = {
-          data: btoa(String.fromCharCode(...new Uint8Array(buf))),
-          filename: audioFile.name,
-        };
+        if (audioFile.size > 20 * 1024 * 1024) {
+          setError('Аудиофайл слишком большой (максимум 20 МБ)');
+          setSubmitting(false);
+          return;
+        }
+        fd.append('audio', audioFile);
       }
 
-      const data = await api.post('/assemblies', body);
+      const res = await fetch('/api/assemblies', {
+        method: 'POST',
+        credentials: 'include',
+        body: fd, // browser sets Content-Type: multipart/form-data automatically
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw { data, message: data.message || data.error || `HTTP ${res.status}` };
+      }
+
+      // If audio was attached but server says no audio was received — warn user
+      if (audioFile && data.assembly && !data.audioReceived) {
+        console.warn('Audio file was attached but server did not acknowledge it');
+      }
+
       setAssemblyId(data.assembly.id);
       setAssembly(data.assembly);
     } catch (err) {
