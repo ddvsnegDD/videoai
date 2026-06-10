@@ -727,8 +727,12 @@ app.get('/api/clips', requireAuth, async (req, res) => {
 app.patch('/api/clips/:id', requireAuth, async (req, res) => {
   try {
     const clipId = Number(req.params.id);
-    const { folder_id } = req.body;
-    if (folder_id === undefined) return res.status(400).json({ error: 'missing_folder_id' });
+    const { folder_id, title } = req.body;
+
+    // At least one field must be provided
+    if (folder_id === undefined && title === undefined) {
+      return res.status(400).json({ error: 'nothing_to_update' });
+    }
 
     const clip = await pool.query(
       `SELECT id FROM projects WHERE id = $1 AND user_id = $2`,
@@ -736,18 +740,35 @@ app.patch('/api/clips/:id', requireAuth, async (req, res) => {
     );
     if (clip.rows.length === 0) return res.status(404).json({ error: 'not_found' });
 
-    if (folder_id !== null) {
-      const folder = await pool.query(
-        `SELECT id FROM folders WHERE id = $1 AND user_id = $2`,
-        [folder_id, req.userId],
-      );
-      if (folder.rows.length === 0) return res.status(404).json({ error: 'folder_not_found' });
+    const sets = [];
+    const vals = [];
+    let idx = 1;
+
+    // Handle folder_id update
+    if (folder_id !== undefined) {
+      if (folder_id !== null) {
+        const folder = await pool.query(
+          `SELECT id FROM folders WHERE id = $1 AND user_id = $2`,
+          [folder_id, req.userId],
+        );
+        if (folder.rows.length === 0) return res.status(404).json({ error: 'folder_not_found' });
+      }
+      sets.push(`folder_id = $${idx++}`);
+      vals.push(folder_id);
     }
 
-    await pool.query(`UPDATE projects SET folder_id = $1 WHERE id = $2`, [folder_id, clipId]);
+    // Handle title update (trim, max 80 chars, empty → NULL for auto-name fallback)
+    if (title !== undefined) {
+      const trimmed = typeof title === 'string' ? title.trim().slice(0, 80) : null;
+      sets.push(`title = $${idx++}`);
+      vals.push(trimmed || null);
+    }
+
+    vals.push(clipId);
+    await pool.query(`UPDATE projects SET ${sets.join(', ')} WHERE id = $${idx}`, vals);
     res.json({ ok: true });
   } catch (err) {
-    console.error('move clip error:', err);
+    console.error('update clip error:', err);
     res.status(500).json({ error: 'server_error' });
   }
 });

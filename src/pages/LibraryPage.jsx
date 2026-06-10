@@ -13,11 +13,14 @@ const glassPanel = {
   boxShadow: '0 16px 32px rgba(10,46,31,0.03)', padding: 24,
 };
 
-function ClipCard({ clip, folders, onMoved }) {
+function ClipCard({ clip, folders, onMoved, onRenamed }) {
   const v = useRef(null);
   const [hovered, setHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(clip.title || '');
   const menuRef = useRef(null);
+  const titleInputRef = useRef(null);
   const isVeo = clip.model === 'veo';
   const date = clip.created_at
     ? new Date(clip.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -37,6 +40,21 @@ function ClipCard({ clip, folders, onMoved }) {
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, [menuOpen]);
+
+  useEffect(() => { if (editing) titleInputRef.current?.focus(); }, [editing]);
+
+  async function saveTitle() {
+    const trimmed = editTitle.trim().slice(0, 80);
+    setEditing(false);
+    if (trimmed && trimmed !== clip.title) {
+      try {
+        await api.patch(`/clips/${clip.id}`, { title: trimmed });
+        onRenamed(clip.id, trimmed);
+      } catch {}
+    } else {
+      setEditTitle(clip.title || '');
+    }
+  }
 
   async function moveToFolder(folderId) {
     try {
@@ -68,7 +86,30 @@ function ClipCard({ clip, folders, onMoved }) {
       </div>
 
       <div style={{ padding: 16 }}>
-        <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 4px', color: C.dark, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{clip.title}</h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+          {editing ? (
+            <input
+              ref={titleInputRef}
+              value={editTitle}
+              onChange={e => setEditTitle(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setEditTitle(clip.title || ''); setEditing(false); } }}
+              onBlur={saveTitle}
+              maxLength={80}
+              style={{ flex: 1, fontSize: 15, fontWeight: 600, color: C.dark, border: `1px solid ${C.primary}`, borderRadius: 6, padding: '2px 6px', outline: 'none', minWidth: 0 }}
+            />
+          ) : (
+            <>
+              <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: C.dark, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>{clip.title}</h3>
+              <button
+                onClick={e => { e.stopPropagation(); setEditTitle(clip.title || ''); setEditing(true); }}
+                style={{ border: 'none', background: 'none', cursor: 'pointer', color: C.gray400, padding: 2, display: 'grid', flexShrink: 0, opacity: hovered ? 1 : 0, transition: 'opacity 0.15s' }}
+                title="Переименовать"
+              >
+                <Pencil size={13} />
+              </button>
+            </>
+          )}
+        </div>
         <div style={{ fontSize: 12.5, color: '#6B7F74', marginBottom: 14 }}>{date}</div>
         <div style={{ display: 'flex', gap: 8, borderTop: '1px solid #F1F5F9', paddingTop: 12 }}>
           <a href={clip.video_url} download target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ flex: 1, textDecoration: 'none' }}>
@@ -207,6 +248,10 @@ export default function LibraryPage() {
     } catch {}
   }
 
+  function handleClipRenamed(clipId, newTitle) {
+    setClips(prev => prev.map(c => c.id === clipId ? { ...c, title: newTitle } : c));
+  }
+
   function handleClipMoved(clipId, folderId) {
     setClips(prev => prev.map(c => c.id === clipId ? { ...c, folder_id: folderId } : c));
     setFolders(prev => prev.map(f => {
@@ -293,7 +338,7 @@ export default function LibraryPage() {
         </div>
       ) : filtered.length > 0 ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(264px, 1fr))', gap: 22 }}>
-          {filtered.map(c => <ClipCard key={c.id} clip={c} folders={folders} onMoved={handleClipMoved} />)}
+          {filtered.map(c => <ClipCard key={c.id} clip={c} folders={folders} onMoved={handleClipMoved} onRenamed={handleClipRenamed} />)}
         </div>
       ) : (
         <div style={{ ...glassPanel, textAlign: 'center', padding: '64px 32px' }}>

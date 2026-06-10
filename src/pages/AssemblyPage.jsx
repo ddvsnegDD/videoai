@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Video, Film, Loader, CheckCircle, XCircle, Download,
-  GripVertical, X, Music, Upload,
+  GripVertical, X, Music, Upload, FolderOpen,
 } from 'lucide-react';
 import { C } from '../lib/theme';
 import { api } from '../lib/api';
@@ -90,6 +90,8 @@ export default function AssemblyPage() {
   const existingId = searchParams.get('id');
 
   const [clips, setClips] = useState([]);
+  const [folders, setFolders] = useState([]);
+  const [activeFolder, setActiveFolder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState([]);
   const [canvas, setCanvas] = useState('9x16');
@@ -108,7 +110,10 @@ export default function AssemblyPage() {
   const audioInputRef = useRef(null);
 
   useEffect(() => {
-    api.get('/clips').then(d => setClips(d.clips || [])).catch(() => {}).finally(() => setLoading(false));
+    Promise.all([
+      api.get('/clips').then(d => setClips(d.clips || [])),
+      api.get('/folders').then(d => setFolders(d.folders || [])),
+    ]).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   // Polling for assembly status
@@ -288,18 +293,59 @@ export default function AssemblyPage() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 24, alignItems: 'start' }}>
         {/* Left: clip picker */}
         <div>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: C.dark, marginBottom: 16 }}>Выберите клипы <span style={{ fontWeight: 400, color: C.gray400, fontSize: 13 }}>({selected.length}/10)</span></h2>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: C.dark, marginBottom: 12 }}>Выберите клипы <span style={{ fontWeight: 400, color: C.gray400, fontSize: 13 }}>({selected.length}/10)</span></h2>
+
+          {/* Folder filter chips */}
+          {folders.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+              <button
+                onClick={() => setActiveFolder(null)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8,
+                  border: `1px solid ${!activeFolder ? C.primary : '#E2EAE6'}`,
+                  background: !activeFolder ? C.primaryLight : '#fff',
+                  color: !activeFolder ? C.primaryDark : C.gray600,
+                  fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                Все <span style={{ color: C.gray400, fontWeight: 400, fontSize: 11 }}>({clips.length})</span>
+              </button>
+              {folders.map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => setActiveFolder(activeFolder === f.id ? null : f.id)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8,
+                    border: `1px solid ${activeFolder === f.id ? C.primary : '#E2EAE6'}`,
+                    background: activeFolder === f.id ? C.primaryLight : '#fff',
+                    color: activeFolder === f.id ? C.primaryDark : C.gray600,
+                    fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  <FolderOpen size={12} /> {f.name} <span style={{ color: C.gray400, fontWeight: 400, fontSize: 11 }}>({f.clip_count})</span>
+                </button>
+              ))}
+            </div>
+          )}
+
           {loading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
               <Loader size={28} color={C.primary} style={{ animation: 'va-spin 1s linear infinite' }} />
             </div>
-          ) : clips.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 }}>
-              {clips.map(c => (
-                <ClipThumb key={c.id} clip={c} selected={!!selected.find(s => s.id === c.id)} onToggle={() => toggleClip(c)} />
-              ))}
-            </div>
-          ) : (
+          ) : clips.length > 0 ? (() => {
+            const visibleClips = activeFolder ? clips.filter(c => c.folder_id === activeFolder) : clips;
+            return visibleClips.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 }}>
+                {visibleClips.map(c => (
+                  <ClipThumb key={c.id} clip={c} selected={!!selected.find(s => s.id === c.id)} onToggle={() => toggleClip(c)} />
+                ))}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '24px 16px', color: C.gray400, fontSize: 13 }}>
+                В этой папке нет клипов
+              </div>
+            );
+          })() : (
             <div style={{ ...glassPanel, textAlign: 'center', padding: '40px 24px' }}>
               <Film size={28} color={C.gray400} />
               <p style={{ color: C.gray500, fontSize: 14, marginTop: 12 }}>Нет готовых клипов. Сначала создайте видео в редакторе.</p>
