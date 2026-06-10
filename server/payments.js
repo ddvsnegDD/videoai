@@ -219,11 +219,10 @@ async function creditPayment(yookassaPaymentId) {
     return { ok: false, reason: 'unknown_package' };
   }
 
-  // Step 4: Amount check (allow small rounding, but not major mismatch)
-  const minAcceptable = pkg.price * 0.99; // YooKassa charges exact amount, tiny tolerance
-  if (paidAmount < minAcceptable) {
+  // Step 4: Two-sided amount check (underpay AND overpay → mismatch)
+  const tolerance = pkg.price * 0.01; // 1% for kopek rounding
+  if (Math.abs(paidAmount - pkg.price) > tolerance) {
     console.log(`[YooKassa] Amount mismatch: expected ${pkg.price}, got ${paidAmount} for ${yookassaPaymentId}`);
-    // Record as mismatch
     await pool.query(
       `UPDATE payments SET status = 'mismatch', paid_amount = $1
        WHERE yookassa_payment_id = $2 AND status = 'pending'`,
@@ -431,15 +430,20 @@ export async function getPaymentStatus(paymentDbId, userId) {
 
 const PAYMENT_STALE_THRESHOLD = 5 * 60 * 1000; // 5 minutes
 const PAYMENT_RECONCILE_INTERVAL = 2 * 60 * 1000; // every 2 min
+const PAYMENT_TTL = 60 * 60 * 1000; // 1 hour — cancel if still pending after this
+const MAX_NOT_FOUND_RETRIES = 3;
+
+const notFoundCounts = new Map();
 
 /**
  * Проверяет pending-платежи старше порога, верифицирует через GET.
+ * Терминальные (canceled, expired, TTL) и not_found N раз → canceled.
  */
 export async function reconcilePayments() {
   try {
     const staleThreshold = new Date(Date.now() - PAYMENT_STALE_THRESHOLD).toISOString();
     const result = await pool.query(
-      `SELECT id, yookassa_payment_id
+      `SELECT id, yookassa_payment_id, created_at
        FROM payments
        WHERE status = 'pending'
          AND provider = 'yookassa'
@@ -453,18 +457,40 @@ export async function reconcilePayments() {
     console.log(`[YooKassa] Reconciler: checking ${result.rows.length} stale payments`);
 
     for (const row of result.rows) {
+      const yid = row.yookassa_payment_id;
+
+      // TTL: cancel payments pending longer than 1 hour
+      if (Date.now() - new Date(row.created_at).getTime() > PAYMENT_TTL) {
+        console.log(`[YooKassa] Reconciler: TTL expired for ${yid}, canceling`);
+        await cancelPayment(yid);
+        notFoundCounts.delete(yid);
+        continue;
+      }
+
       try {
-        const verified = await verifyPayment(row.yookassa_payment_id);
+        const verified = await verifyPayment(yid);
 
         if (verified.status === 'succeeded') {
-          console.log(`[YooKassa] Reconciler: crediting ${row.yookassa_payment_id}`);
-          await creditPayment(row.yookassa_payment_id);
-        } else if (verified.status === 'canceled') {
-          await cancelPayment(row.yookassa_payment_id);
+          console.log(`[YooKassa] Reconciler: crediting ${yid}`);
+          await creditPayment(yid);
+        } else if (verified.status === 'canceled' || verified.status === 'expired') {
+          await cancelPayment(yid);
         }
         // pending/waiting_for_capture — оставляем, проверим позже
+        notFoundCounts.delete(yid);
       } catch (err) {
-        console.log(`[YooKassa] Reconciler error for ${row.yookassa_payment_id}: ${err.message}`);
+        if (err.status === 404) {
+          const count = (notFoundCounts.get(yid) || 0) + 1;
+          notFoundCounts.set(yid, count);
+          console.log(`[YooKassa] Reconciler: ${yid} not found (${count}/${MAX_NOT_FOUND_RETRIES})`);
+          if (count >= MAX_NOT_FOUND_RETRIES) {
+            console.log(`[YooKassa] Reconciler: ${yid} not found ${count} times, canceling`);
+            await cancelPayment(yid);
+            notFoundCounts.delete(yid);
+          }
+        } else {
+          console.log(`[YooKassa] Reconciler error for ${yid}: ${err.message}`);
+        }
       }
     }
   } catch (err) {
