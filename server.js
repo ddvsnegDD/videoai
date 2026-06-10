@@ -8,6 +8,7 @@ import { createJob, getJob, listJobs, runWatchdog, startReconciler } from './ser
 import { VIDEO_MODELS, MOTION_PRESETS } from './server/providers/falVideo.js';
 import { IMAGE_MODEL } from './server/providers/falImage.js';
 import { uploadBuffer, deleteByPrefix } from './server/storage.js';
+import { startAssemblyWorker, MAX_CLIPS, MAX_DURATION_SEC } from './server/assembly.js';
 
 const S3_BUCKET = process.env.S3_BUCKET || 'videoai-media';
 
@@ -821,6 +822,87 @@ app.delete('/api/folders/:id', requireAuth, async (req, res) => {
   }
 });
 
+// ── Assemblies ──
+
+app.post('/api/assemblies', requireAuth, async (req, res) => {
+  try {
+    const { clip_ids, canvas, audio } = req.body;
+
+    if (!clip_ids || !Array.isArray(clip_ids) || clip_ids.length === 0) {
+      return res.status(400).json({ error: 'no_clips', message: 'Выберите хотя бы один клип' });
+    }
+    if (clip_ids.length > MAX_CLIPS) {
+      return res.status(400).json({ error: 'too_many_clips', message: `Максимум ${MAX_CLIPS} клипов` });
+    }
+    if (!canvas || !['9x16', '1x1', '16x9'].includes(canvas)) {
+      return res.status(400).json({ error: 'invalid_canvas', message: 'Выберите холст' });
+    }
+
+    // One active assembly per user
+    const active = await pool.query(
+      `SELECT id FROM assemblies WHERE user_id = $1 AND status IN ('queued', 'processing') LIMIT 1`,
+      [req.userId],
+    );
+    if (active.rows.length > 0) {
+      return res.status(409).json({ error: 'assembly_active', message: 'Дождитесь завершения текущей сборки' });
+    }
+
+    // Validate all clips belong to user and are ready
+    const clipCheck = await pool.query(
+      `SELECT id FROM projects
+       WHERE id = ANY($1) AND user_id = $2 AND status = 'ready' AND (brief->>'video_url') IS NOT NULL`,
+      [clip_ids, req.userId],
+    );
+    const validIds = new Set(clipCheck.rows.map(r => r.id));
+    const invalid = clip_ids.filter(id => !validIds.has(id));
+    if (invalid.length > 0) {
+      return res.status(400).json({ error: 'invalid_clips', message: `Клипы недоступны: ${invalid.join(', ')}` });
+    }
+
+    // Handle audio upload (base64 in body for simplicity)
+    let audioKey = null;
+    if (audio?.data && audio?.filename) {
+      const buf = Buffer.from(audio.data, 'base64');
+      if (buf.length > 20 * 1024 * 1024) {
+        return res.status(400).json({ error: 'audio_too_large', message: 'Аудио до 20 МБ' });
+      }
+      const ext = audio.filename.split('.').pop()?.toLowerCase() || 'mp3';
+      if (!['mp3', 'wav', 'm4a', 'aac', 'ogg'].includes(ext)) {
+        return res.status(400).json({ error: 'audio_format', message: 'Формат: mp3, wav, m4a' });
+      }
+      audioKey = `tmp/assembly-audio/${req.userId}-${Date.now()}.${ext}`;
+      await uploadBuffer({ buffer: buf, key: audioKey, contentType: `audio/${ext}` });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO assemblies (user_id, status, canvas, clip_ids, audio_key)
+       VALUES ($1, 'queued', $2, $3, $4) RETURNING id, status, created_at`,
+      [req.userId, canvas, JSON.stringify(clip_ids), audioKey],
+    );
+
+    console.log(`[assembly] Created #${result.rows[0].id} for user ${req.userId} (${clip_ids.length} clips, canvas=${canvas})`);
+    res.json({ assembly: result.rows[0] });
+  } catch (err) {
+    console.error('create assembly error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.get('/api/assemblies/:id', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, status, canvas, clip_ids, output_url, error, created_at, started_at, finished_at
+       FROM assemblies WHERE id = $1 AND user_id = $2`,
+      [req.params.id, req.userId],
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'not_found' });
+    res.json({ assembly: result.rows[0] });
+  } catch (err) {
+    console.error('get assembly error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
 // ── Static + SPA ──
 app.use(express.static(DIST));
 app.get('/{*splat}', (_req, res) => { res.sendFile(join(DIST, 'index.html')); });
@@ -857,6 +939,8 @@ async function start() {
   } else {
     console.log('[YooKassa] Payment reconciler skipped — credentials not configured');
   }
+
+  startAssemblyWorker();
 
   app.listen(PORT, () => console.log(`VideoAI server on port ${PORT}`));
 }

@@ -114,6 +114,7 @@ export default function Layout() {
     { to: '/dashboard', label: 'Проекты' },
     { to: '/library', label: 'Библиотека' },
     { to: '/editor', label: 'Создать клип' },
+    { to: '/assembly', label: 'Склеить' },
     { to: '/billing', label: 'Тарифы' },
   ];
   if (isAdmin(user)) navItems.push({ to: '/admin', label: 'Админ', icon: Shield });

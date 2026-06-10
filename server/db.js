@@ -157,6 +157,24 @@ export async function initDB() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id)`).catch(() => {});
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_projects_folder ON projects(folder_id)`).catch(() => {});
 
+  // B2: video assemblies
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS assemblies (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      status VARCHAR(20) DEFAULT 'queued',
+      canvas VARCHAR(10) NOT NULL,
+      clip_ids JSONB NOT NULL,
+      audio_key TEXT,
+      output_url TEXT,
+      error TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      started_at TIMESTAMPTZ,
+      finished_at TIMESTAMPTZ
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_assemblies_user_status ON assemblies(user_id, status)`).catch(() => {});
+
   console.log('DB tables ready');
 }
 
