@@ -153,6 +153,11 @@ export async function initDB() {
     WHERE auth_provider IS NOT NULL AND provider_id IS NOT NULL
   `).catch(() => {});
 
+  // Profile: avatar + consent
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`).catch(() => {});
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_accepted_at TIMESTAMPTZ`).catch(() => {});
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_version TEXT`).catch(() => {});
+
   // B1: folders for clip library
   await pool.query(`
     CREATE TABLE IF NOT EXISTS folders (

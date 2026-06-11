@@ -174,13 +174,23 @@ export default function Layout() {
             }}>
               <Sparkles size={14} /> {credits ?? 0} кредитов
             </button>
-            <button
-              onClick={() => logout && logout()}
-              title="Выйти"
-              style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, color: '#fff', fontWeight: 700, fontSize: 14 }}
-            >
-              {(user?.email?.[0] || 'U').toUpperCase()}
-            </button>
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => logout && logout()}
+                title={(() => {
+                  const displayName = user?.name || user?.email || (user?.auth_provider === 'vk' ? 'Пользователь VK' : user?.auth_provider === 'yandex' ? 'Пользователь Яндекс' : 'Пользователь');
+                  const via = user?.auth_provider === 'vk' ? 'Вход через VK' : user?.auth_provider === 'yandex' ? 'Вход через Яндекс' : user?.email || '';
+                  return `${displayName}\n${via}\nНажмите, чтобы выйти`;
+                })()}
+                style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: 'pointer', overflow: 'hidden', padding: 0, background: user?.avatar_url ? 'transparent' : `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, color: '#fff', fontWeight: 700, fontSize: 14 }}
+              >
+                {user?.avatar_url ? (
+                  <img src={user.avatar_url} alt="" style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', display: 'block' }} referrerPolicy="no-referrer" />
+                ) : (
+                  (user?.name?.[0] || user?.email?.[0] || 'U').toUpperCase()
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </header>

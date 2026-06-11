@@ -20,3 +20,12 @@ export function validateNewEmail(email) {
 
   return null;
 }
+
+export function validateDisposable(email) {
+  const domain = email.split('@')[1]?.toLowerCase();
+  if (!domain) return 'Некорректный email.';
+  if (disposableSet.has(domain)) {
+    return 'Использование временной почты запрещено.';
+  }
+  return null;
+}

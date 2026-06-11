@@ -15,6 +15,7 @@ const OTP_RATE_LIMIT_SEC = 60;
 const MAX_ATTEMPTS = 5;
 const JWT_EXPIRY = '30d';
 const WELCOME_CREDITS = Number(process.env.WELCOME_CREDITS) || 50;
+const CONSENT_VERSION = '2026-06-08';
 
 function generateCode() {
   return String(randomInt(100000, 1000000));
@@ -100,8 +101,13 @@ export async function verifyCode(email, code) {
 
   if (user.rows.length === 0) {
     user = await pool.query(
-      `INSERT INTO users (email, credits) VALUES ($1, $2) RETURNING *`,
-      [normalized, WELCOME_CREDITS]
+      `INSERT INTO users (email, credits, consent_accepted_at, consent_version) VALUES ($1, $2, NOW(), $3) RETURNING *`,
+      [normalized, WELCOME_CREDITS, CONSENT_VERSION]
+    );
+  } else if (!user.rows[0].consent_accepted_at) {
+    await pool.query(
+      `UPDATE users SET consent_accepted_at = NOW(), consent_version = $1 WHERE id = $2`,
+      [CONSENT_VERSION, user.rows[0].id],
     );
   }
 
@@ -151,6 +157,8 @@ function sanitizeUser(row) {
     free_wan: row.free_wan ?? 0,
     free_veo: row.free_veo ?? 0,
     free_image: row.free_image ?? 0,
+    avatar_url: row.avatar_url || null,
+    auth_provider: row.auth_provider || null,
     created_at: row.created_at,
   };
 }

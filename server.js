@@ -118,6 +118,34 @@ app.get('/api/auth/yandex/callback', yandexCallback);
 app.get('/api/auth/vk', vkInit);
 app.get('/api/auth/vk/callback', vkCallback);
 
+// ── Set email (for SSO users without email, before first payment) ──
+app.post('/api/auth/set-email', requireAuth, async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !email.includes('@')) return res.status(400).json({ error: 'invalid_email' });
+
+    const normalized = email.trim().toLowerCase();
+
+    const me = await pool.query(`SELECT email FROM users WHERE id = $1`, [req.userId]);
+    if (me.rows[0]?.email) return res.status(400).json({ error: 'email_already_set' });
+
+    const { validateDisposable } = await import('./server/validateEmail.js');
+    const rejection = validateDisposable(normalized);
+    if (rejection) return res.status(400).json({ error: 'domain_blocked', message: rejection });
+
+    const taken = await pool.query(`SELECT id FROM users WHERE email = $1`, [normalized]);
+    if (taken.rows.length > 0) {
+      return res.status(409).json({ error: 'email_taken', message: 'Этот email уже используется другим аккаунтом' });
+    }
+
+    await pool.query(`UPDATE users SET email = $1 WHERE id = $2`, [normalized, req.userId]);
+    res.json({ ok: true, email: normalized });
+  } catch (err) {
+    console.error('set-email error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
 // ── Config (public) ──
 app.get('/api/config', (_req, res) => {
   res.json({

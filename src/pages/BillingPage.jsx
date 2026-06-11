@@ -23,6 +23,12 @@ export default function BillingPage() {
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(true);
 
+  const [emailModal, setEmailModal] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [pendingPkg, setPendingPkg] = useState(null);
+
   const justPaid = searchParams.get('paid') === '1';
 
   useEffect(() => {
@@ -33,13 +39,11 @@ export default function BillingPage() {
       .finally(() => setHistoryLoading(false));
   }, []);
 
-  async function handleBuy(pkg) {
-    if (buying) return;
+  async function proceedToPay(pkg) {
     setBuying(pkg.id);
     setError('');
     try {
       const res = await api.post('/payments/create', { packageId: pkg.id });
-      // Save paymentId for polling on result page
       if (res.paymentId) {
         localStorage.setItem('lastPaymentId', String(res.paymentId));
       }
@@ -49,6 +53,42 @@ export default function BillingPage() {
         ? 'Оплата временно недоступна'
         : 'Ошибка при создании платежа. Попробуйте ещё раз.');
       setBuying(null);
+    }
+  }
+
+  async function handleBuy(pkg) {
+    if (buying) return;
+    if (!user?.email) {
+      setPendingPkg(pkg);
+      setEmailModal(true);
+      setEmailInput('');
+      setEmailError('');
+      return;
+    }
+    proceedToPay(pkg);
+  }
+
+  async function handleEmailSubmit(e) {
+    e.preventDefault();
+    const trimmed = emailInput.trim();
+    if (!trimmed || !trimmed.includes('@')) {
+      setEmailError('Введите корректный email.');
+      return;
+    }
+    setEmailSaving(true);
+    setEmailError('');
+    try {
+      await api.post('/auth/set-email', { email: trimmed });
+      await refresh();
+      setEmailModal(false);
+      if (pendingPkg) proceedToPay(pendingPkg);
+    } catch (err) {
+      const code = err.data?.error;
+      if (code === 'domain_blocked') setEmailError(err.data?.message || 'Этот домен запрещён.');
+      else if (code === 'email_taken') setEmailError('Этот email уже используется другим аккаунтом.');
+      else setEmailError('Ошибка сохранения. Попробуйте ещё раз.');
+    } finally {
+      setEmailSaving(false);
     }
   }
 
@@ -197,6 +237,72 @@ export default function BillingPage() {
           Оплата через ЮKassa. Кредиты начисляются автоматически после подтверждения платежа. Не является публичной офертой.
         </p>
       </div>
+
+      {emailModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.45)', display: 'grid', placeItems: 'center',
+        }} onClick={() => { if (!emailSaving) { setEmailModal(false); setPendingPkg(null); } }}>
+          <form
+            onClick={e => e.stopPropagation()}
+            onSubmit={handleEmailSubmit}
+            style={{
+              background: '#fff', borderRadius: 20, padding: '32px 28px', width: 400, maxWidth: '90vw',
+              boxShadow: '0 24px 48px rgba(0,0,0,0.15)',
+            }}
+          >
+            <h3 style={{ fontFamily: '"Manrope", sans-serif', fontSize: 18, fontWeight: 700, color: C.dark, marginBottom: 8 }}>
+              Укажите email
+            </h3>
+            <p style={{ fontSize: 14, color: C.gray500, marginBottom: 20, lineHeight: 1.4 }}>
+              На него придёт чек об оплате. Вы также сможете входить по email.
+            </p>
+            <input
+              type="email"
+              value={emailInput}
+              onChange={e => setEmailInput(e.target.value)}
+              placeholder="you@example.com"
+              autoFocus
+              disabled={emailSaving}
+              style={{
+                width: '100%', padding: '12px 14px', fontSize: 15, borderRadius: 10,
+                border: `1.5px solid ${emailError ? C.danger : C.gray200}`,
+                outline: 'none', boxSizing: 'border-box',
+                transition: 'border-color 0.2s',
+              }}
+              onFocus={e => { if (!emailError) e.target.style.borderColor = C.primary; }}
+              onBlur={e => { if (!emailError) e.target.style.borderColor = C.gray200; }}
+            />
+            {emailError && (
+              <p style={{ color: C.danger, fontSize: 13, marginTop: 8 }}>{emailError}</p>
+            )}
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button
+                type="button"
+                disabled={emailSaving}
+                onClick={() => { setEmailModal(false); setPendingPkg(null); }}
+                style={{
+                  flex: 1, padding: 12, borderRadius: 10, border: `1px solid ${C.gray200}`,
+                  background: '#fff', color: C.gray600, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                Отмена
+              </button>
+              <button
+                type="submit"
+                disabled={emailSaving}
+                style={{
+                  flex: 1, padding: 12, borderRadius: 10, border: 'none',
+                  background: C.primary, color: '#fff', fontSize: 14, fontWeight: 600,
+                  cursor: emailSaving ? 'default' : 'pointer', opacity: emailSaving ? 0.7 : 1,
+                }}
+              >
+                {emailSaving ? 'Сохраняем...' : 'Продолжить'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
