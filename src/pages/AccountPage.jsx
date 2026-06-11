@@ -16,6 +16,7 @@ export default function AccountPage() {
   const [otpCode, setOtpCode] = useState('');
   const [emailError, setEmailError] = useState('');
   const [emailSaving, setEmailSaving] = useState(false);
+  const [emailSuccess, setEmailSuccess] = useState('');
 
   const displayName = user?.name || user?.email || (user?.auth_provider === 'vk' ? 'Пользователь VK' : user?.auth_provider === 'yandex' ? 'Пользователь Яндекс' : 'Пользователь');
   const loginMethod = user?.auth_provider === 'vk' ? 'Вход через VK' : user?.auth_provider === 'yandex' ? 'Вход через Яндекс' : 'Вход по email';
@@ -42,6 +43,7 @@ export default function AccountPage() {
     if (!trimmed || !trimmed.includes('@')) { setEmailError('Введите корректный email.'); return; }
     setEmailSaving(true);
     setEmailError('');
+    setEmailSuccess('');
     try {
       await api.post('/account/email/request-code', { newEmail: trimmed });
       setEmailStep('code');
@@ -59,21 +61,26 @@ export default function AccountPage() {
   async function handleEmailConfirm(e) {
     e.preventDefault();
     if (!otpCode.trim()) { setEmailError('Введите код.'); return; }
+    if (emailSaving) return;
     setEmailSaving(true);
     setEmailError('');
+    setEmailSuccess('');
     try {
       await api.post('/account/email/confirm', { newEmail: newEmail.trim(), code: otpCode.trim() });
-      await refresh();
+      const savedEmail = newEmail.trim().toLowerCase();
       setEmailStep('idle');
       setNewEmail('');
       setOtpCode('');
+      setEmailSaving(false);
+      setEmailSuccess(`Email изменён на ${savedEmail}`);
+      setTimeout(() => setEmailSuccess(''), 5000);
+      try { await refresh(); } catch {}
     } catch (err) {
       const code = err.data?.error;
       if (code === 'invalid_code') setEmailError('Неверный код. Попробуйте ещё раз.');
       else if (code === 'too_many_attempts') setEmailError('Слишком много попыток. Запросите новый код.');
       else if (code === 'email_taken') setEmailError('Этот email уже используется другим аккаунтом.');
       else setEmailError('Ошибка подтверждения.');
-    } finally {
       setEmailSaving(false);
     }
   }
@@ -245,6 +252,9 @@ export default function AccountPage() {
 
         {emailError && (
           <div style={{ fontSize: 13, marginTop: 8, color: C.danger }}>{emailError}</div>
+        )}
+        {emailSuccess && (
+          <div style={{ fontSize: 13, marginTop: 8, color: C.primary, fontWeight: 600 }}>{emailSuccess}</div>
         )}
       </div>
 
