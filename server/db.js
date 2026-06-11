@@ -143,6 +143,16 @@ export async function initDB() {
   await pool.query(`ALTER TABLE generation_jobs DROP COLUMN IF EXISTS segment_index`).catch(() => {});
   await pool.query(`ALTER TABLE generation_jobs DROP COLUMN IF EXISTS segment_duration`).catch(() => {});
 
+  // SSO: auth_provider + provider_id on users
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(20)`).catch(() => {});
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_id TEXT`).catch(() => {});
+  await pool.query(`ALTER TABLE users ALTER COLUMN email DROP NOT NULL`).catch(() => {});
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_provider
+    ON users (auth_provider, provider_id)
+    WHERE auth_provider IS NOT NULL AND provider_id IS NOT NULL
+  `).catch(() => {});
+
   // B1: folders for clip library
   await pool.query(`
     CREATE TABLE IF NOT EXISTS folders (

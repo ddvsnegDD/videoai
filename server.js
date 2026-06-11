@@ -9,6 +9,7 @@ import { VIDEO_MODELS, MOTION_PRESETS } from './server/providers/falVideo.js';
 import { IMAGE_MODEL } from './server/providers/falImage.js';
 import { uploadBuffer, deleteByPrefix } from './server/storage.js';
 import { startAssemblyWorker, MAX_CLIPS, MAX_DURATION_SEC } from './server/assembly.js';
+import { yandexInit, yandexCallback, vkInit, vkCallback } from './server/sso.js';
 
 const S3_BUCKET = process.env.S3_BUCKET || 'videoai-media';
 
@@ -110,6 +111,12 @@ app.post('/api/auth/logout', (_req, res) => {
   res.clearCookie('token', { path: '/' });
   res.json({ ok: true });
 });
+
+// ── SSO (Яндекс ID, VK ID) ──
+app.get('/api/auth/yandex', yandexInit);
+app.get('/api/auth/yandex/callback', yandexCallback);
+app.get('/api/auth/vk', vkInit);
+app.get('/api/auth/vk/callback', vkCallback);
 
 // ── Config (public) ──
 app.get('/api/config', (_req, res) => {
