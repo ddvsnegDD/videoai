@@ -104,7 +104,7 @@ export async function yandexCallback(req, res) {
     res.clearCookie('oauth_state', { path: '/' });
 
     if (!code || !state || state !== savedState) {
-      return res.redirect('/#/login?error=csrf');
+      return res.redirect('/login?error=csrf');
     }
 
     const tokenRes = await fetch('https://oauth.yandex.com/token', {
