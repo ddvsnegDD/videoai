@@ -1,5 +1,8 @@
-import disposableDomains from 'disposable-email-domains';
+import { createRequire } from 'module';
 import { BLOCKED_FOREIGN, ALLOWED_RUSSIAN } from './emailDomains.js';
+
+const require = createRequire(import.meta.url);
+const disposableDomains = require('disposable-email-domains');
 
 const disposableSet = new Set(disposableDomains);
 
