@@ -686,6 +686,38 @@ app.post('/api/admin/users/:id/credits', requireAdmin, async (req, res) => {
   }
 });
 
+app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
+  try {
+    const targetId = Number(req.params.id);
+
+    // Guard: no self-deletion
+    if (targetId === req.userId) {
+      return res.status(400).json({ error: 'cannot_delete_self', message: 'Нельзя удалить собственный аккаунт' });
+    }
+
+    // Check user exists
+    const userRow = await pool.query('SELECT id, email FROM users WHERE id = $1', [targetId]);
+    if (userRow.rows.length === 0) return res.status(404).json({ error: 'user_not_found' });
+
+    // Guard: refuse if user has payments (financial history must be preserved)
+    const paymentsRow = await pool.query('SELECT COUNT(*)::int AS cnt FROM payments WHERE user_id = $1', [targetId]);
+    if (paymentsRow.rows[0].cnt > 0) {
+      return res.status(409).json({
+        error: 'has_payments',
+        message: `У пользователя есть платежи (${paymentsRow.rows[0].cnt}), удаление запрещено`,
+      });
+    }
+
+    // CASCADE will delete projects, folders, generation_jobs, assemblies
+    await pool.query('DELETE FROM users WHERE id = $1', [targetId]);
+    console.log(`[Admin] Deleted user ${targetId} (${userRow.rows[0].email}) by admin ${req.userId}`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('admin delete user error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
 app.get('/api/admin/jobs', requireAdmin, async (_req, res) => {
   try {
     const result = await pool.query(`

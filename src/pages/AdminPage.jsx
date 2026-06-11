@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Activity, Plus, Minus, Shield } from 'lucide-react';
+import { Users, Activity, Plus, Minus, Shield, Trash2 } from 'lucide-react';
 import { C } from '../lib/theme.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.jsx';
@@ -14,6 +14,8 @@ export default function AdminPage() {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creditInputs, setCreditInputs] = useState({});
+  const [deleteTarget, setDeleteTarget] = useState(null); // { id, email } or null
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!authLoading && (!user || user.role !== 'admin')) {
@@ -50,6 +52,21 @@ export default function AdminPage() {
       setCreditInputs(prev => ({ ...prev, [userId]: '' }));
     } catch (err) {
       alert('Ошибка: ' + (err.data?.error || err.message));
+    }
+  }
+
+  async function handleDeleteUser() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.del(`/admin/users/${deleteTarget.id}`);
+      setUsers(prev => prev.filter(u => u.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch (err) {
+      const msg = err.data?.message || err.message || 'Ошибка удаления';
+      alert(msg);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -179,6 +196,20 @@ export default function AdminPage() {
                         >
                           +100
                         </button>
+                        {u.id !== user.id && (
+                          <button
+                            onClick={() => setDeleteTarget({ id: u.id, email: u.email })}
+                            style={{
+                              ...miniBtn,
+                              background: '#FEE2E2',
+                              color: '#991B1B',
+                              marginLeft: 4,
+                            }}
+                            title="Удалить аккаунт"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
                       </div>
                     </Td>
                   </tr>
@@ -238,6 +269,56 @@ export default function AdminPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {/* Delete confirmation modal */}
+        {deleteTarget && (
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }} onClick={() => !deleting && setDeleteTarget(null)}>
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: '#fff', borderRadius: 16, padding: '28px 32px', maxWidth: 420, width: '90%',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+              }}
+            >
+              <h3 style={{ margin: '0 0 12px', fontSize: '1.125rem', fontWeight: 700, color: C.dark }}>
+                Удалить аккаунт?
+              </h3>
+              <p style={{ margin: '0 0 8px', fontSize: '0.875rem', color: C.gray600, lineHeight: 1.5 }}>
+                <strong>{deleteTarget.email}</strong>
+              </p>
+              <p style={{ margin: '0 0 24px', fontSize: '0.8125rem', color: '#991B1B', lineHeight: 1.5 }}>
+                Действие необратимо. Вместе с аккаунтом удалятся все его проекты, клипы, папки и сборки.
+              </p>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => setDeleteTarget(null)}
+                  disabled={deleting}
+                  style={{
+                    padding: '10px 20px', borderRadius: 10, border: `1px solid ${C.gray200}`,
+                    background: '#fff', color: C.gray600, fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer',
+                  }}
+                >
+                  Отмена
+                </button>
+                <button
+                  onClick={handleDeleteUser}
+                  disabled={deleting}
+                  style={{
+                    padding: '10px 20px', borderRadius: 10, border: 'none',
+                    background: '#DC2626', color: '#fff', fontWeight: 700, fontSize: '0.875rem',
+                    cursor: deleting ? 'wait' : 'pointer', opacity: deleting ? 0.6 : 1,
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  <Trash2 size={14} />
+                  {deleting ? 'Удаление...' : 'Удалить'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
