@@ -146,6 +146,117 @@ app.post('/api/auth/set-email', requireAuth, async (req, res) => {
   }
 });
 
+// ── Account (profile view + edit) ──
+
+app.get('/api/account', requireAuth, async (req, res) => {
+  try {
+    const user = await getMe(req.userId);
+    if (!user) { res.clearCookie('token'); return res.status(401).json({ error: 'user_not_found' }); }
+    res.json({ user });
+  } catch (err) {
+    console.error('account get error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.post('/api/account/name', requireAuth, async (req, res) => {
+  try {
+    const { name } = req.body;
+    const trimmed = typeof name === 'string' ? name.trim().slice(0, 80) : null;
+    const value = trimmed || null;
+    await pool.query(`UPDATE users SET name = $1 WHERE id = $2`, [value, req.userId]);
+    res.json({ ok: true, name: value });
+  } catch (err) {
+    console.error('account name error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.post('/api/account/email/request-code', requireAuth, async (req, res) => {
+  try {
+    const { newEmail } = req.body;
+    if (!newEmail || !newEmail.includes('@')) return res.status(400).json({ error: 'invalid_email' });
+    const normalized = newEmail.trim().toLowerCase();
+
+    const { validateDisposable } = await import('./server/validateEmail.js');
+    const rejection = validateDisposable(normalized);
+    if (rejection) return res.status(400).json({ error: 'domain_blocked', message: rejection });
+
+    const taken = await pool.query(
+      `SELECT id FROM users WHERE email = $1 AND id != $2`,
+      [normalized, req.userId],
+    );
+    if (taken.rows.length > 0) {
+      return res.status(409).json({ error: 'email_taken', message: 'Этот email уже используется другим аккаунтом.' });
+    }
+
+    const recent = await pool.query(
+      `SELECT id FROM auth_codes WHERE email = $1 AND created_at > NOW() - INTERVAL '60 seconds' LIMIT 1`,
+      [normalized],
+    );
+    if (recent.rows.length > 0) return res.status(429).json({ error: 'too_soon', wait: 60 });
+
+    await pool.query(`DELETE FROM auth_codes WHERE email = $1 AND expires_at < NOW()`, [normalized]);
+
+    const { randomInt } = await import('crypto');
+    const code = String(randomInt(100000, 1000000));
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    await pool.query(
+      `INSERT INTO auth_codes (email, code, expires_at) VALUES ($1, $2, $3)`,
+      [normalized, code, expiresAt],
+    );
+
+    const { sendOTPEmail } = await import('./server/email.js');
+    await sendOTPEmail(normalized, code);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('account email request-code error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.post('/api/account/email/confirm', requireAuth, async (req, res) => {
+  try {
+    const { newEmail, code } = req.body;
+    if (!newEmail || !code) return res.status(400).json({ error: 'missing_fields' });
+    const normalized = newEmail.trim().toLowerCase();
+
+    const active = await pool.query(
+      `SELECT id, code, attempts FROM auth_codes
+       WHERE email = $1 AND used = FALSE AND expires_at > NOW()
+       ORDER BY created_at DESC LIMIT 1`,
+      [normalized],
+    );
+    if (active.rows.length === 0) return res.status(400).json({ error: 'invalid_code' });
+
+    const row = active.rows[0];
+    if (row.attempts >= 5) {
+      await pool.query(`UPDATE auth_codes SET used = TRUE WHERE id = $1`, [row.id]);
+      return res.status(400).json({ error: 'too_many_attempts' });
+    }
+    if (row.code !== code) {
+      await pool.query(`UPDATE auth_codes SET attempts = attempts + 1 WHERE id = $1`, [row.id]);
+      return res.status(400).json({ error: 'invalid_code' });
+    }
+
+    await pool.query(`UPDATE auth_codes SET used = TRUE WHERE id = $1`, [row.id]);
+
+    const taken = await pool.query(
+      `SELECT id FROM users WHERE email = $1 AND id != $2`,
+      [normalized, req.userId],
+    );
+    if (taken.rows.length > 0) {
+      return res.status(409).json({ error: 'email_taken', message: 'Этот email уже используется другим аккаунтом.' });
+    }
+
+    await pool.query(`UPDATE users SET email = $1 WHERE id = $2`, [normalized, req.userId]);
+    res.json({ ok: true, email: normalized });
+  } catch (err) {
+    console.error('account email confirm error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
 // ── Config (public) ──
 app.get('/api/config', (_req, res) => {
   res.json({

@@ -102,7 +102,6 @@ export default function Layout() {
   // безопасно: если их нет — UI не сломается.
   const auth = useAuth();
   const user = auth?.user;
-  const logout = auth?.logout;
   const credits = user?.credits ?? auth?.credits ?? 0;
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -176,11 +175,11 @@ export default function Layout() {
             </button>
             <div style={{ position: 'relative' }}>
               <button
-                onClick={() => logout && logout()}
+                onClick={() => navigate('/account')}
                 title={(() => {
                   const displayName = user?.name || user?.email || (user?.auth_provider === 'vk' ? 'Пользователь VK' : user?.auth_provider === 'yandex' ? 'Пользователь Яндекс' : 'Пользователь');
                   const via = user?.auth_provider === 'vk' ? 'Вход через VK' : user?.auth_provider === 'yandex' ? 'Вход через Яндекс' : user?.email || '';
-                  return `${displayName}\n${via}\nНажмите, чтобы выйти`;
+                  return `${displayName}\n${via}\nЛичный кабинет`;
                 })()}
                 style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: 'pointer', overflow: 'hidden', padding: 0, background: user?.avatar_url ? 'transparent' : `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, color: '#fff', fontWeight: 700, fontSize: 14 }}
               >

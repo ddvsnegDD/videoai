@@ -18,6 +18,7 @@ import PaymentResultPage from './pages/PaymentResultPage';
 import OfertaPage from './pages/OfertaPage';
 import PrivacyPage from './pages/PrivacyPage';
 import ConsentPage from './pages/ConsentPage';
+import AccountPage from './pages/AccountPage';
 
 /* ── ErrorBoundary (ловит рендер-ошибки, не даёт белый экран) ── */
 class ErrorBoundary extends Component {
@@ -86,6 +87,7 @@ export default function App() {
             <Route path="/library" element={<ProtectedRoute><LibraryPage /></ProtectedRoute>} />
             <Route path="/assembly" element={<ProtectedRoute><AssemblyPage /></ProtectedRoute>} />
             <Route path="/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
+            <Route path="/account" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
             <Route path="/payment/result" element={<ProtectedRoute><PaymentResultPage /></ProtectedRoute>} />
 
             {/* Админка — только для ADMIN_EMAILS */}
