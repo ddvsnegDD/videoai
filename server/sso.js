@@ -5,6 +5,9 @@ import pool from './db.js';
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRY = '30d';
 const WELCOME_CREDITS = Number(process.env.WELCOME_CREDITS) || 50;
+const FREE_WAN_SSO = parseInt(process.env.FREE_WAN_SSO ?? '1', 10);
+const FREE_VEO_SSO = parseInt(process.env.FREE_VEO_SSO ?? '1', 10);
+const FREE_IMAGE_SSO = parseInt(process.env.FREE_IMAGE_SSO ?? '1', 10);
 const CONSENT_VERSION = '2026-06-08';
 
 const COOKIE_OPTS = {
@@ -87,8 +90,8 @@ async function findOrCreateSSOUser(provider, providerId, email, name, avatarUrl,
   if (withConsent) params.push(CONSENT_VERSION);
 
   const result = await pool.query(
-    `INSERT INTO users (email, name, auth_provider, provider_id, avatar_url, credits${consentFields})
-     VALUES ($1, $2, $3, $4, $5, ${WELCOME_CREDITS}${consentValues}) RETURNING *`,
+    `INSERT INTO users (email, name, auth_provider, provider_id, avatar_url, credits, free_wan, free_veo, free_image${consentFields})
+     VALUES ($1, $2, $3, $4, $5, ${WELCOME_CREDITS}, ${FREE_WAN_SSO}, ${FREE_VEO_SSO}, ${FREE_IMAGE_SSO}${consentValues}) RETURNING *`,
     params,
   );
   return { user: result.rows[0], isNew: true };

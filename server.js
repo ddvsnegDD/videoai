@@ -67,8 +67,24 @@ app.get('/api/health', async (req, res) => {
 // ── Auth ──
 app.post('/api/auth/send-code', async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, turnstileToken } = req.body;
     if (!email || !email.includes('@')) return res.status(400).json({ error: 'invalid_email' });
+
+    const normalized = email.trim().toLowerCase();
+
+    if (process.env.TURNSTILE_ENABLED === 'true') {
+      const hasActiveCode = await pool.query(
+        `SELECT id FROM auth_codes WHERE email = $1 AND expires_at > NOW() AND used = FALSE LIMIT 1`,
+        [normalized],
+      );
+      if (hasActiveCode.rows.length === 0) {
+        if (!turnstileToken) return res.status(400).json({ error: 'captcha_required', message: 'Пройдите проверку безопасности.' });
+        const { verifyTurnstile } = await import('./server/turnstile.js');
+        const ok = await verifyTurnstile(turnstileToken, req.ip);
+        if (!ok) return res.status(400).json({ error: 'captcha_failed', message: 'Проверка не пройдена. Попробуйте ещё раз.' });
+      }
+    }
+
     const result = await sendCode(email);
     if (result.error === 'domain_blocked') return res.status(400).json(result);
     if (result.error) return res.status(429).json(result);
@@ -130,7 +146,7 @@ app.post('/api/auth/set-email', requireAuth, async (req, res) => {
     if (me.rows[0]?.email) return res.status(400).json({ error: 'email_already_set' });
 
     const { validateDisposable } = await import('./server/validateEmail.js');
-    const rejection = validateDisposable(normalized);
+    const rejection = await validateDisposable(normalized);
     if (rejection) return res.status(400).json({ error: 'domain_blocked', message: rejection });
 
     const taken = await pool.query(`SELECT id FROM users WHERE email = $1`, [normalized]);
@@ -179,7 +195,7 @@ app.post('/api/account/email/request-code', requireAuth, async (req, res) => {
     const normalized = newEmail.trim().toLowerCase();
 
     const { validateDisposable } = await import('./server/validateEmail.js');
-    const rejection = validateDisposable(normalized);
+    const rejection = await validateDisposable(normalized);
     if (rejection) return res.status(400).json({ error: 'domain_blocked', message: rejection });
 
     const taken = await pool.query(
@@ -265,6 +281,7 @@ app.get('/api/config', (_req, res) => {
     ),
     motion_presets: MOTION_PRESETS.map(p => ({ key: p.key, label: p.label })),
     credits_image: IMAGE_MODEL.credits,
+    turnstile_site_key: process.env.TURNSTILE_ENABLED === 'true' ? (process.env.TURNSTILE_SITE_KEY || '') : '',
   });
 });
 

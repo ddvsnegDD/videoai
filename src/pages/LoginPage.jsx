@@ -25,6 +25,11 @@ export default function LoginPage() {
   const [agreed, setAgreed] = useState(false);
   const codeRefs = useRef([]);
 
+  const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const turnstileRef = useRef(null);
+  const turnstileWidgetRef = useRef(null);
+
   // Redirect if already logged in
   useEffect(() => {
     if (user) navigate('/dashboard', { replace: true });
@@ -37,6 +42,53 @@ export default function LoginPage() {
     return () => clearTimeout(t);
   }, [countdown]);
 
+  // Fetch Turnstile site key from config
+  useEffect(() => {
+    api.get('/config').then(data => {
+      if (data.turnstile_site_key) setTurnstileSiteKey(data.turnstile_site_key);
+    }).catch(() => {});
+  }, []);
+
+  // Load Turnstile script & render widget on email step
+  useEffect(() => {
+    if (!turnstileSiteKey || step !== 'email') return;
+    let cancelled = false;
+
+    function renderWidget() {
+      if (cancelled || !turnstileRef.current || !window.turnstile) return;
+      turnstileWidgetRef.current = window.turnstile.render(turnstileRef.current, {
+        sitekey: turnstileSiteKey,
+        callback: (t) => setTurnstileToken(t),
+        'expired-callback': () => setTurnstileToken(''),
+        'error-callback': () => setTurnstileToken(''),
+      });
+    }
+
+    if (window.turnstile) {
+      renderWidget();
+    } else {
+      if (!document.querySelector('script[src*="challenges.cloudflare.com/turnstile"]')) {
+        const s = document.createElement('script');
+        s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+        s.async = true;
+        document.head.appendChild(s);
+      }
+      const iv = setInterval(() => {
+        if (window.turnstile) { clearInterval(iv); renderWidget(); }
+      }, 200);
+      const timeout = setTimeout(() => clearInterval(iv), 10000);
+      return () => { cancelled = true; clearInterval(iv); clearTimeout(timeout); cleanup(); };
+    }
+
+    function cleanup() {
+      if (turnstileWidgetRef.current != null && window.turnstile) {
+        try { window.turnstile.remove(turnstileWidgetRef.current); } catch {}
+        turnstileWidgetRef.current = null;
+      }
+    }
+    return () => { cancelled = true; cleanup(); };
+  }, [turnstileSiteKey, step]);
+
   async function handleSendCode(e) {
     e.preventDefault();
     if (!email.includes('@')) {
@@ -46,12 +98,14 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
     try {
-      await api.post('/auth/send-code', { email });
+      await api.post('/auth/send-code', { email, turnstileToken: turnstileToken || undefined });
       setStep('code');
       setCountdown(60);
       setTimeout(() => codeRefs.current[0]?.focus(), 100);
     } catch (err) {
-      if (err.data?.error === 'domain_blocked') {
+      if (err.data?.error === 'captcha_required' || err.data?.error === 'captcha_failed') {
+        setError(err.data.message || 'Пройдите проверку безопасности.');
+      } else if (err.data?.error === 'domain_blocked') {
         setError(err.data.message);
       } else if (err.data?.error === 'too_soon') {
         setError(`Подождите ${err.data.wait} сек перед повторной отправкой`);
@@ -249,6 +303,10 @@ export default function LoginPage() {
                     <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: C.primary, textDecoration: 'underline', textUnderlineOffset: 2 }}>Политикой конфиденциальности</a>.
                   </span>
                 </label>
+
+                {turnstileSiteKey && (
+                  <div ref={turnstileRef} style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }} />
+                )}
 
                 <Btn
                   variant="primary"

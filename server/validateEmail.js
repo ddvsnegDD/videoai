@@ -6,11 +6,33 @@ const disposableDomains = require('disposable-email-domains');
 
 const disposableSet = new Set(disposableDomains);
 
-export function validateNewEmail(email) {
+const MBV_ENABLED = process.env.MAILBOXVALIDATOR_ENABLED === 'true';
+const MBV_KEY = process.env.MAILBOXVALIDATOR_API_KEY || '';
+
+async function checkDisposableMBV(email) {
+  if (!MBV_ENABLED || !MBV_KEY) return null;
+  try {
+    const url = `https://api.mailboxvalidator.com/v2/validation/single?email=${encodeURIComponent(email)}&key=${encodeURIComponent(MBV_KEY)}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.error) return null;
+    if (data.is_disposable === true) return true;
+    return false;
+  } catch {
+    return null;
+  }
+}
+
+export async function validateNewEmail(email) {
   const domain = email.split('@')[1]?.toLowerCase();
   if (!domain) return 'Некорректный email.';
 
-  if (disposableSet.has(domain)) {
+  const mbv = await checkDisposableMBV(email);
+  if (mbv === true) {
+    return 'Использование временной почты запрещено. Пожалуйста, используйте российский почтовый сервис (например, Яндекс или Mail.ru).';
+  }
+  if (mbv === null && disposableSet.has(domain)) {
     return 'Использование временной почты запрещено. Пожалуйста, используйте российский почтовый сервис (например, Яндекс или Mail.ru).';
   }
 
@@ -21,11 +43,13 @@ export function validateNewEmail(email) {
   return null;
 }
 
-export function validateDisposable(email) {
+export async function validateDisposable(email) {
   const domain = email.split('@')[1]?.toLowerCase();
   if (!domain) return 'Некорректный email.';
-  if (disposableSet.has(domain)) {
-    return 'Использование временной почты запрещено.';
-  }
+
+  const mbv = await checkDisposableMBV(email);
+  if (mbv === true) return 'Использование временной почты запрещено.';
+  if (mbv === null && disposableSet.has(domain)) return 'Использование временной почты запрещено.';
+
   return null;
 }

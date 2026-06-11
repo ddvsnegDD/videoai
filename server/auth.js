@@ -14,7 +14,10 @@ const OTP_EXPIRY_MIN = 10;
 const OTP_RATE_LIMIT_SEC = 60;
 const MAX_ATTEMPTS = 5;
 const JWT_EXPIRY = '30d';
-const WELCOME_CREDITS = Number(process.env.WELCOME_CREDITS) || 50;
+const WELCOME_CREDITS_EMAIL = Number(process.env.WELCOME_CREDITS_EMAIL) || 10;
+const FREE_WAN_EMAIL = parseInt(process.env.FREE_WAN_EMAIL ?? '1', 10);
+const FREE_VEO_EMAIL = parseInt(process.env.FREE_VEO_EMAIL ?? '0', 10);
+const FREE_IMAGE_EMAIL = parseInt(process.env.FREE_IMAGE_EMAIL ?? '1', 10);
 const CONSENT_VERSION = '2026-06-08';
 
 function generateCode() {
@@ -30,7 +33,7 @@ export async function sendCode(email) {
     [normalized],
   );
   if (existing.rows.length === 0) {
-    const rejection = validateNewEmail(normalized);
+    const rejection = await validateNewEmail(normalized);
     if (rejection) return { error: 'domain_blocked', message: rejection };
   }
 
@@ -101,8 +104,8 @@ export async function verifyCode(email, code) {
 
   if (user.rows.length === 0) {
     user = await pool.query(
-      `INSERT INTO users (email, credits, consent_accepted_at, consent_version) VALUES ($1, $2, NOW(), $3) RETURNING *`,
-      [normalized, WELCOME_CREDITS, CONSENT_VERSION]
+      `INSERT INTO users (email, credits, free_wan, free_veo, free_image, consent_accepted_at, consent_version) VALUES ($1, $2, $3, $4, $5, NOW(), $6) RETURNING *`,
+      [normalized, WELCOME_CREDITS_EMAIL, FREE_WAN_EMAIL, FREE_VEO_EMAIL, FREE_IMAGE_EMAIL, CONSENT_VERSION]
     );
   } else if (!user.rows[0].consent_accepted_at) {
     await pool.query(
