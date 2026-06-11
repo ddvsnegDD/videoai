@@ -44,7 +44,9 @@ export default function LoginPage() {
       setCountdown(60);
       setTimeout(() => codeRefs.current[0]?.focus(), 100);
     } catch (err) {
-      if (err.data?.error === 'too_soon') {
+      if (err.data?.error === 'domain_blocked') {
+        setError(err.data.message);
+      } else if (err.data?.error === 'too_soon') {
         setError(`Подождите ${err.data.wait} сек перед повторной отправкой`);
       } else {
         setError('Ошибка отправки кода. Попробуйте позже.');
@@ -175,7 +177,7 @@ export default function LoginPage() {
               </p>
 
               <form onSubmit={handleSendCode}>
-                <div style={{ position: 'relative', marginBottom: 20 }}>
+                <div style={{ position: 'relative', marginBottom: 8 }}>
                   <Mail
                     size={18}
                     color={C.gray400}
@@ -192,6 +194,14 @@ export default function LoginPage() {
                     autoComplete="email"
                   />
                 </div>
+                <p style={{
+                  fontSize: '0.75rem',
+                  color: C.gray400,
+                  marginBottom: 16,
+                  lineHeight: 1.4,
+                }}>
+                  Для новых аккаунтов разрешены российские почтовые сервисы (Яндекс, Mail.ru)
+                </p>
 
                 {error && (
                   <p style={{

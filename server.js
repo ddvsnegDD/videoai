@@ -69,6 +69,7 @@ app.post('/api/auth/send-code', async (req, res) => {
     const { email } = req.body;
     if (!email || !email.includes('@')) return res.status(400).json({ error: 'invalid_email' });
     const result = await sendCode(email);
+    if (result.error === 'domain_blocked') return res.status(400).json(result);
     if (result.error) return res.status(429).json(result);
     res.json({ ok: true });
   } catch (err) {

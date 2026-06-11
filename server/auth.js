@@ -2,6 +2,7 @@ import { randomInt } from 'crypto';
 import jwt from 'jsonwebtoken';
 import pool from './db.js';
 import { sendOTPEmail } from './email.js';
+import { validateNewEmail } from './validateEmail.js';
 
 if (!process.env.JWT_SECRET) {
   console.error('FATAL: JWT_SECRET environment variable is not set');
@@ -21,6 +22,16 @@ function generateCode() {
 
 export async function sendCode(email) {
   const normalized = email.trim().toLowerCase();
+
+  // Grandfather rule: validate domain only for NEW registrations
+  const existing = await pool.query(
+    `SELECT id FROM users WHERE email = $1 LIMIT 1`,
+    [normalized],
+  );
+  if (existing.rows.length === 0) {
+    const rejection = validateNewEmail(normalized);
+    if (rejection) return { error: 'domain_blocked', message: rejection };
+  }
 
   // Rate limit: 1 code per 60 seconds per email
   const recent = await pool.query(
