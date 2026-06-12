@@ -147,7 +147,16 @@ export function requireAuth(req, res, next) {
 export async function getMe(userId) {
   const result = await pool.query(`SELECT * FROM users WHERE id = $1`, [userId]);
   if (result.rows.length === 0) return null;
-  return sanitizeUser(result.rows[0]);
+
+  const identities = await pool.query(
+    `SELECT provider, provider_id, provider_email, provider_name, created_at
+     FROM user_identities WHERE user_id = $1 ORDER BY created_at`,
+    [userId],
+  );
+
+  const user = sanitizeUser(result.rows[0]);
+  user.identities = identities.rows;
+  return user;
 }
 
 function sanitizeUser(row) {

@@ -273,6 +273,53 @@ app.post('/api/account/email/confirm', requireAuth, async (req, res) => {
   }
 });
 
+// ── Unlink SSO provider ──
+app.delete('/api/account/unlink/:provider', requireAuth, async (req, res) => {
+  try {
+    const { provider } = req.params;
+    if (!['yandex', 'vk'].includes(provider)) {
+      return res.status(400).json({ error: 'invalid_provider' });
+    }
+
+    // Check if this identity exists for the user
+    const identity = await pool.query(
+      `SELECT id FROM user_identities WHERE user_id = $1 AND provider = $2`,
+      [req.userId, provider],
+    );
+    if (identity.rows.length === 0) {
+      return res.status(404).json({ error: 'not_linked' });
+    }
+
+    // Count all login methods: email + linked identities
+    const userRow = await pool.query(`SELECT email FROM users WHERE id = $1`, [req.userId]);
+    const identityCount = await pool.query(
+      `SELECT COUNT(*)::int AS cnt FROM user_identities WHERE user_id = $1`,
+      [req.userId],
+    );
+
+    const hasEmail = !!userRow.rows[0]?.email;
+    const totalMethods = (hasEmail ? 1 : 0) + identityCount.rows[0].cnt;
+
+    if (totalMethods <= 1) {
+      return res.status(400).json({
+        error: 'last_method',
+        message: 'Нельзя отвязать единственный способ входа',
+      });
+    }
+
+    await pool.query(
+      `DELETE FROM user_identities WHERE user_id = $1 AND provider = $2`,
+      [req.userId, provider],
+    );
+
+    console.log(`[account] Unlinked ${provider} for user=${req.userId}`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('unlink error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
 // ── Config (public) ──
 app.get('/api/config', (_req, res) => {
   res.json({

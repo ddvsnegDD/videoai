@@ -179,9 +179,12 @@ export default function Layout() {
               <button
                 onClick={() => navigate('/account')}
                 title={(() => {
-                  const displayName = user?.name || user?.email || (user?.auth_provider === 'vk' ? 'Пользователь VK' : user?.auth_provider === 'yandex' ? 'Пользователь Яндекс' : 'Пользователь');
-                  const via = user?.auth_provider === 'vk' ? 'Вход через VK' : user?.auth_provider === 'yandex' ? 'Вход через Яндекс' : user?.email || '';
-                  return `${displayName}\n${via}\nЛичный кабинет`;
+                  const ids = user?.identities || [];
+                  const hasYandex = ids.some(i => i.provider === 'yandex');
+                  const hasVk = ids.some(i => i.provider === 'vk');
+                  const displayName = user?.name || user?.email || (hasVk ? 'Пользователь VK' : hasYandex ? 'Пользователь Яндекс' : 'Пользователь');
+                  const methods = [user?.email && 'Email', hasYandex && 'Яндекс', hasVk && 'VK'].filter(Boolean).join(', ');
+                  return `${displayName}\n${methods ? `Вход: ${methods}` : ''}\nЛичный кабинет`;
                 })()}
                 style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: 'pointer', overflow: 'hidden', padding: 0, background: user?.avatar_url ? 'transparent' : `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, color: '#fff', fontWeight: 700, fontSize: 14 }}
               >

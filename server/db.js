@@ -190,6 +190,30 @@ export async function initDB() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_assemblies_user_status ON assemblies(user_id, status)`).catch(() => {});
 
+  // Multi-provider SSO: user_identities table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_identities (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      provider VARCHAR(20) NOT NULL,
+      provider_id TEXT NOT NULL,
+      provider_email TEXT,
+      provider_name TEXT,
+      avatar_url TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(provider, provider_id)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_identities_user ON user_identities(user_id)`).catch(() => {});
+
+  // Migrate existing SSO data from users.auth_provider/provider_id → user_identities
+  await pool.query(`
+    INSERT INTO user_identities (user_id, provider, provider_id)
+    SELECT id, auth_provider, provider_id FROM users
+    WHERE auth_provider IS NOT NULL AND provider_id IS NOT NULL
+    ON CONFLICT (provider, provider_id) DO NOTHING
+  `).catch(() => {});
+
   console.log('DB tables ready');
 }
 

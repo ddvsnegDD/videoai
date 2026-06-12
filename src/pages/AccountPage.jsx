@@ -1,11 +1,32 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import { C } from '../lib/theme';
-import { LogOut, Mail, User, Sparkles, Zap } from 'lucide-react';
+import { LogOut, Mail, User, Sparkles, Zap, Link2, Unlink, ShieldCheck } from 'lucide-react';
+
+const YANDEX_ICON = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="#FC3F1D"/>
+    <path d="M13.32 7.2h-.93c-1.68 0-2.57.98-2.57 2.43 0 1.64.62 2.4 1.9 3.35l1.05.79-3.07 4.63h-2.2l2.78-4.11c-1.6-1.23-2.5-2.35-2.5-4.3 0-2.5 1.72-4.19 4.57-4.19h2.84v12.6h-1.87V7.2z" fill="#fff"/>
+  </svg>
+);
+
+const VK_ICON = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="#0077FF"/>
+    <path d="M12.77 16.25h.73s.22-.02.33-.14c.1-.1.1-.31.1-.31s-.01-1.12.5-1.29c.5-.16 1.15 1.06 1.84 1.53.52.36.92.28.92.28l1.85-.03s.97-.06.51-.83c-.04-.06-.26-.58-1.33-1.63-1.12-1.1-.97-.92.38-2.82.82-1.16 1.15-1.86 1.05-2.16-.1-.29-.7-.21-.7-.21l-2.08.01s-.15-.02-.27.05c-.11.07-.18.24-.18.24s-.33.88-.76 1.63c-.92 1.58-1.29 1.66-1.44 1.56-.35-.24-.26-1.04-.26-1.6 0-1.72.26-2.44-.51-2.63-.26-.06-.44-.1-1.1-.11-.84-.01-1.55 0-1.95.2-.27.13-.47.43-.35.45.16.02.52.1.71.36.25.34.24 1.1.24 1.1s.14 2.03-.33 2.28c-.33.17-.78-.18-1.74-1.77-.44-.73-.77-1.53-.77-1.53s-.06-.16-.18-.24c-.14-.1-.34-.13-.34-.13l-1.97.01s-.3.01-.4.14c-.1.11-.01.35-.01.35s1.53 3.59 3.26 5.4c1.59 1.66 3.39 1.55 3.39 1.55z" fill="#fff"/>
+  </svg>
+);
+
+const PROVIDER_META = {
+  yandex: { label: 'Яндекс ID', icon: YANDEX_ICON, color: '#FC3F1D' },
+  vk: { label: 'VK ID', icon: VK_ICON, color: '#0077FF' },
+};
 
 export default function AccountPage() {
   const { user, logout, refresh } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [nameVal, setNameVal] = useState(user?.name || '');
   const [nameSaving, setNameSaving] = useState(false);
@@ -18,9 +39,59 @@ export default function AccountPage() {
   const [emailSaving, setEmailSaving] = useState(false);
   const [emailSuccess, setEmailSuccess] = useState('');
 
-  const displayName = user?.name || user?.email || (user?.auth_provider === 'vk' ? 'Пользователь VK' : user?.auth_provider === 'yandex' ? 'Пользователь Яндекс' : 'Пользователь');
-  const loginMethod = user?.auth_provider === 'vk' ? 'Вход через VK' : user?.auth_provider === 'yandex' ? 'Вход через Яндекс' : 'Вход по email';
+  const [unlinking, setUnlinking] = useState(null); // provider being unlinked
+  const [linkMsg, setLinkMsg] = useState(''); // success/error message
+  const [linkMsgType, setLinkMsgType] = useState('success'); // 'success' | 'error'
+
+  // Handle link/unlink query params from OAuth redirect
+  useEffect(() => {
+    const linked = searchParams.get('linked');
+    const linkError = searchParams.get('link_error');
+
+    if (linked) {
+      const meta = PROVIDER_META[linked];
+      setLinkMsg(`${meta?.label || linked} успешно привязан`);
+      setLinkMsgType('success');
+      searchParams.delete('linked');
+      setSearchParams(searchParams, { replace: true });
+      refresh();
+      setTimeout(() => setLinkMsg(''), 5000);
+    } else if (linkError) {
+      const messages = {
+        conflict: 'Этот аккаунт уже привязан к другому пользователю',
+        auth: 'Необходимо войти в аккаунт',
+        csrf: 'Ошибка безопасности. Попробуйте ещё раз',
+        server: 'Ошибка сервера. Попробуйте позже',
+        token: 'Ошибка авторизации у провайдера',
+        profile: 'Не удалось получить данные профиля',
+      };
+      setLinkMsg(messages[linkError] || 'Ошибка привязки');
+      setLinkMsgType('error');
+      searchParams.delete('link_error');
+      setSearchParams(searchParams, { replace: true });
+      setTimeout(() => setLinkMsg(''), 7000);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Identities from server
+  const identities = user?.identities || [];
+  const yandexIdentity = identities.find(i => i.provider === 'yandex');
+  const vkIdentity = identities.find(i => i.provider === 'vk');
+
+  const displayName = user?.name || user?.email || (vkIdentity ? 'Пользователь VK' : yandexIdentity ? 'Пользователь Яндекс' : 'Пользователь');
   const avatarLetter = (user?.name?.[0] || user?.email?.[0] || 'U').toUpperCase();
+
+  // Count login methods for unlink protection
+  const hasEmail = !!user?.email;
+  const totalMethods = (hasEmail ? 1 : 0) + identities.length;
+  const canUnlink = totalMethods > 1;
+
+  // Build login method description
+  const loginMethods = [];
+  if (hasEmail) loginMethods.push('Email');
+  if (yandexIdentity) loginMethods.push('Яндекс');
+  if (vkIdentity) loginMethods.push('VK');
+  const loginMethod = loginMethods.length > 0 ? loginMethods.join(' + ') : 'Не настроен';
 
   async function handleNameSave() {
     setNameSaving(true);
@@ -82,6 +153,27 @@ export default function AccountPage() {
       else if (code === 'email_taken') setEmailError('Этот email уже используется другим аккаунтом.');
       else setEmailError('Ошибка подтверждения.');
       setEmailSaving(false);
+    }
+  }
+
+  async function handleUnlink(provider) {
+    if (!canUnlink) return;
+    setUnlinking(provider);
+    setLinkMsg('');
+    try {
+      await api.del(`/account/unlink/${provider}`);
+      await refresh();
+      const meta = PROVIDER_META[provider];
+      setLinkMsg(`${meta?.label || provider} отвязан`);
+      setLinkMsgType('success');
+      setTimeout(() => setLinkMsg(''), 4000);
+    } catch (err) {
+      const msg = err.data?.message || err.data?.error || 'Ошибка отвязки';
+      setLinkMsg(msg);
+      setLinkMsgType('error');
+      setTimeout(() => setLinkMsg(''), 5000);
+    } finally {
+      setUnlinking(null);
     }
   }
 
@@ -157,6 +249,65 @@ export default function AccountPage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Способы входа */}
+      <div style={card}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: C.dark, marginBottom: 16 }}>
+          <ShieldCheck size={16} style={{ marginRight: 6, verticalAlign: -3 }} />Способы входа
+        </div>
+
+        {linkMsg && (
+          <div style={{
+            fontSize: 13, padding: '10px 14px', borderRadius: 10, marginBottom: 14,
+            background: linkMsgType === 'success' ? '#D1FAE5' : '#FEE2E2',
+            color: linkMsgType === 'success' ? '#065F46' : '#991B1B',
+            fontWeight: 500,
+          }}>
+            {linkMsg}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Email row */}
+          <IdentityRow
+            icon={<Mail size={18} color={C.primary} />}
+            label="Email"
+            linked={hasEmail}
+            detail={user?.email || null}
+            canUnlink={false}
+          />
+
+          {/* Yandex row */}
+          <IdentityRow
+            icon={YANDEX_ICON}
+            label="Яндекс ID"
+            linked={!!yandexIdentity}
+            detail={yandexIdentity?.provider_email || yandexIdentity?.provider_name || null}
+            canUnlink={canUnlink}
+            unlinking={unlinking === 'yandex'}
+            onLink={() => { window.location.href = '/api/auth/yandex?link=1'; }}
+            onUnlink={() => handleUnlink('yandex')}
+          />
+
+          {/* VK row */}
+          <IdentityRow
+            icon={VK_ICON}
+            label="VK ID"
+            linked={!!vkIdentity}
+            detail={vkIdentity?.provider_email || vkIdentity?.provider_name || null}
+            canUnlink={canUnlink}
+            unlinking={unlinking === 'vk'}
+            onLink={() => { window.location.href = '/api/auth/vk?link=1'; }}
+            onUnlink={() => handleUnlink('vk')}
+          />
+        </div>
+
+        {!canUnlink && identities.length > 0 && (
+          <p style={{ fontSize: 12, color: C.gray400, marginTop: 12, lineHeight: 1.4 }}>
+            Добавьте email или ещё один способ входа, чтобы отвязать текущий.
+          </p>
+        )}
       </div>
 
       {/* Edit name */}
@@ -272,6 +423,77 @@ export default function AccountPage() {
       >
         <LogOut size={18} /> Выйти из аккаунта
       </button>
+    </div>
+  );
+}
+
+/** Row component for each login method in "Способы входа" */
+function IdentityRow({ icon, label, linked, detail, canUnlink, unlinking, onLink, onUnlink }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      padding: '12px 14px', borderRadius: 12,
+      background: linked ? '#F0FDF4' : C.gray100,
+      border: `1px solid ${linked ? '#BBF7D0' : C.gray200}`,
+    }}>
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>{icon}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: C.dark }}>{label}</div>
+        {linked && detail && (
+          <div style={{ fontSize: 12, color: C.gray500, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {detail}
+          </div>
+        )}
+      </div>
+      <div style={{ flexShrink: 0 }}>
+        {linked ? (
+          onUnlink ? (
+            <button
+              onClick={onUnlink}
+              disabled={!canUnlink || unlinking}
+              title={!canUnlink ? 'Нельзя отвязать единственный способ входа' : 'Отвязать'}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                border: `1px solid ${canUnlink ? '#FECACA' : C.gray200}`,
+                background: canUnlink ? '#FEF2F2' : C.gray100,
+                color: canUnlink ? '#991B1B' : C.gray400,
+                cursor: canUnlink && !unlinking ? 'pointer' : 'not-allowed',
+                opacity: unlinking ? 0.6 : 1,
+                transition: 'all 0.2s',
+              }}
+            >
+              <Unlink size={12} />
+              {unlinking ? 'Отвязка...' : 'Отвязать'}
+            </button>
+          ) : (
+            <span style={{
+              fontSize: 12, fontWeight: 600, color: '#065F46', padding: '4px 10px',
+              background: '#D1FAE5', borderRadius: 6,
+            }}>
+              Привязан
+            </span>
+          )
+        ) : (
+          onLink && (
+            <button
+              onClick={onLink}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                border: `1px solid ${C.gray200}`,
+                background: '#fff', color: C.primaryDark,
+                cursor: 'pointer', transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = C.primaryLight; e.currentTarget.style.borderColor = C.primary; }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = C.gray200; }}
+            >
+              <Link2 size={12} />
+              Привязать
+            </button>
+          )
+        )}
+      </div>
     </div>
   );
 }
