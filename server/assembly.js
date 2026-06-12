@@ -13,7 +13,7 @@ const FFMPEG_TIMEOUT = 5 * 60 * 1000; // 5 min per assembly
 const WORKER_INTERVAL = 3000; // poll queue every 3s
 
 const CANVAS = {
-  '9x16': { w: 720, h: 1280 },
+  '9x16': { w: 1080, h: 1920 },
   '1x1':  { w: 1080, h: 1080 },
   '16x9': { w: 1280, h: 720 },
 };
