@@ -295,6 +295,18 @@ export default function EditorPage() {
     }
   }
 
+  function handleContinue() {
+    setJobId(null);
+    setError('');
+    setCustomPrompt('');
+    setMotionManual(false);
+    setShowRegenConfirm(false);
+    setShowImagePreview(false);
+    // imageUrl, sourceType, model, targetDuration, projectId — сохраняем
+    // productType, details, style — сохраняем (описание того же товара)
+    refresh();
+  }
+
   function handleReset() {
     setJobId(null);
     setImageJobId(null);
@@ -453,7 +465,7 @@ export default function EditorPage() {
             <div style={{ display: 'flex', gap: 14 }}>
               <ModelCard on={model === 'wan'} onClick={() => setModel('wan')}
                 name="Эконом · Kling 2.5"
-                desc={`Клип ${targetDuration} сек. Жёсткое удержание шрифта и геометрии товара.`}
+                desc={`Клип ${targetDuration} сек. Жёсткое удержание шрифта и геометрии товара. Формат 9:16.`}
                 cost={isFree ? `${freeWan} бесплатно` : `${modelCredits} кредитов`}
                 accent={C.primary} accentLight={C.primaryLight} accentDark={C.primaryDark} />
               <ModelCard on={model === 'veo'} onClick={() => setModel('veo')}
@@ -660,7 +672,10 @@ export default function EditorPage() {
                 <a href={videoUrl} download target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
                   <button style={{ width: '100%', border: 'none', background: C.dark, color: '#fff', padding: 14, borderRadius: 11, fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Download size={16} /> Скачать готовый креатив (MP4)</button>
                 </a>
-                <button onClick={handleReset} style={{ background: 'none', border: 'none', color: '#6B7F74', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginTop: 12 }}>Создать ещё один</button>
+                <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+                  <button onClick={handleContinue} style={{ flex: 1, border: `1.5px solid ${C.primary}`, background: C.primaryLight, color: C.primaryDark, padding: '11px 16px', borderRadius: 10, fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>Продолжить (другой ракурс)</button>
+                  <button onClick={handleReset} style={{ border: `1px solid ${C.gray200}`, background: '#fff', color: '#6B7F74', padding: '11px 16px', borderRadius: 10, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>Начать сначала</button>
+                </div>
               </div>
             )}
           </div>
