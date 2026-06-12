@@ -212,12 +212,28 @@ async function processAssembly(assembly) {
     });
     console.log(`[assembly:${id}] Uploaded ${outputBuf.length} bytes → ${s3Key}`);
 
-    // 6. Mark done
+    // 6. Resolve target folder from source clips (majority rule)
+    let folderId = null;
+    try {
+      const folderResult = await pool.query(
+        `SELECT folder_id, COUNT(*)::int AS cnt FROM projects
+         WHERE id = ANY($1) AND folder_id IS NOT NULL
+         GROUP BY folder_id ORDER BY cnt DESC`,
+        [clip_ids],
+      );
+      if (folderResult.rows.length === 1) {
+        folderId = folderResult.rows[0].folder_id;
+      }
+    } catch (e) {
+      console.error(`[assembly:${id}] folder resolution failed:`, e.message);
+    }
+
+    // 7. Mark done
     await pool.query(
-      `UPDATE assemblies SET status = 'done', output_url = $1, finished_at = NOW() WHERE id = $2`,
-      [outputUrl, id],
+      `UPDATE assemblies SET status = 'done', output_url = $1, folder_id = $2, finished_at = NOW() WHERE id = $3`,
+      [outputUrl, folderId, id],
     );
-    console.log(`[assembly:${id}] ✓ Done`);
+    console.log(`[assembly:${id}] ✓ Done (folder=${folderId})`);
 
   } finally {
     // Cleanup work directory

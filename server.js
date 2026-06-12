@@ -1022,9 +1022,11 @@ app.get('/api/folders', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT f.id, f.name, f.created_at,
-              COUNT(p.id)::int AS clip_count
+              COUNT(DISTINCT p.id)::int AS clip_count,
+              COUNT(DISTINCT a.id)::int AS assembly_count
        FROM folders f
        LEFT JOIN projects p ON p.folder_id = f.id AND p.status = 'ready' AND (p.brief->>'video_url') IS NOT NULL
+       LEFT JOIN assemblies a ON a.folder_id = f.id AND a.status = 'done'
        WHERE f.user_id = $1
        GROUP BY f.id
        ORDER BY f.created_at DESC`,
@@ -1185,6 +1187,33 @@ app.post('/api/assemblies', requireAuth, audioUpload.single('audio'), async (req
       return res.status(400).json({ error: 'audio_format', message: 'Неподдерживаемый формат аудио. Используйте mp3, wav, m4a, aac, ogg.' });
     }
     console.log('create assembly error:', err.message);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.get('/api/assemblies', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT a.id, a.output_url, a.canvas, a.clip_ids, a.folder_id, a.created_at
+       FROM assemblies a
+       WHERE a.user_id = $1 AND a.status = 'done'
+       ORDER BY a.created_at DESC`,
+      [req.userId],
+    );
+    const assemblies = result.rows.map(r => {
+      const clipIds = Array.isArray(r.clip_ids) ? r.clip_ids : JSON.parse(r.clip_ids || '[]');
+      return {
+        id: r.id,
+        output_url: r.output_url,
+        canvas: r.canvas,
+        clip_count: clipIds.length,
+        folder_id: r.folder_id,
+        created_at: r.created_at,
+      };
+    });
+    res.json({ assemblies });
+  } catch (err) {
+    console.error('list assemblies error:', err);
     res.status(500).json({ error: 'server_error' });
   }
 });

@@ -189,6 +189,8 @@ export async function initDB() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_assemblies_user_status ON assemblies(user_id, status)`).catch(() => {});
+  await pool.query(`ALTER TABLE assemblies ADD COLUMN IF NOT EXISTS folder_id INTEGER REFERENCES folders(id) ON DELETE SET NULL`).catch(() => {});
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_assemblies_folder ON assemblies(folder_id)`).catch(() => {});
 
   // Multi-provider SSO: user_identities table
   await pool.query(`
