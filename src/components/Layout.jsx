@@ -74,10 +74,6 @@ function SiteFooter() {
         maxWidth: 1280,
         margin: '24px auto 0',
         padding: '0 24px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 20,
-        flexWrap: 'wrap',
       }}>
         <img
           src={sbpCompactLight}
@@ -87,9 +83,9 @@ function SiteFooter() {
           loading="lazy"
           decoding="async"
         />
-        <span style={{ fontSize: '0.75rem', color: C.gray400 }}>
+        <div style={{ fontSize: '0.8125rem', color: C.gray600, marginTop: 8 }}>
           Оплата картой, СБП, SberPay, T-Pay
-        </span>
+        </div>
       </div>
 
       {/* Соцсети */}

@@ -332,16 +332,13 @@ export default function LoginPage() {
                 <div style={{ flex: 1, height: 1, background: C.gray200 }} />
               </div>
 
-              {/* SSO bonus hint */}
-              <div style={{
-                textAlign: 'center', padding: '10px 16px', borderRadius: 10,
-                background: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.15)',
-                marginBottom: 12,
+              {/* SSO bonus hint — text caption, not a button */}
+              <p style={{
+                textAlign: 'center', margin: '0 0 14px',
+                fontSize: '0.75rem', color: C.primaryDark, fontWeight: 500,
               }}>
-                <span style={{ fontSize: '0.8125rem', color: C.primaryDark, fontWeight: 600 }}>
-                  +50 кредитов за вход через Яндекс или VK
-                </span>
-              </div>
+                +50 кредитов за вход через Яндекс или VK
+              </p>
 
               {/* SSO buttons — gated by consent checkbox */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
