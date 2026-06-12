@@ -1,3 +1,4 @@
+import dns from 'node:dns';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import multer from 'multer';
@@ -10,6 +11,8 @@ import { IMAGE_MODEL } from './server/providers/falImage.js';
 import { uploadBuffer, deleteByPrefix } from './server/storage.js';
 import { startAssemblyWorker, MAX_CLIPS, MAX_DURATION_SEC } from './server/assembly.js';
 import { yandexInit, yandexCallback, vkInit, vkCallback } from './server/sso.js';
+
+dns.setDefaultResultOrder('ipv4first');
 
 const S3_BUCKET = process.env.S3_BUCKET || 'videoai-media';
 
