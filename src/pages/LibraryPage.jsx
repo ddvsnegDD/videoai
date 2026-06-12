@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Video, FolderPlus, FolderOpen, Pencil, Trash2, Download,
-  MoreVertical, Film, Loader, X, Check, ChevronRight,
+  MoreVertical, Film, Loader, X, Check, ChevronRight, Scissors,
 } from 'lucide-react';
 import { C } from '../lib/theme';
 import { api } from '../lib/api';
@@ -152,6 +152,64 @@ function ClipCard({ clip, folders, onMoved, onRenamed }) {
   );
 }
 
+function AssemblyCard({ assembly }) {
+  const v = useRef(null);
+  const [hovered, setHovered] = useState(false);
+  const date = assembly.created_at
+    ? new Date(assembly.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : '';
+  const canvasLabel = { '9x16': '9:16', '1x1': '1:1', '16x9': '16:9' }[assembly.canvas] || assembly.canvas;
+
+  useEffect(() => {
+    const el = v.current;
+    if (!el) return;
+    const seek = () => { try { el.currentTime = 1; } catch {} };
+    el.addEventListener('loadeddata', seek);
+    return () => el.removeEventListener('loadeddata', seek);
+  }, [assembly.output_url]);
+
+  return (
+    <div
+      onMouseEnter={() => { setHovered(true); v.current?.play().catch(() => {}); }}
+      onMouseLeave={() => { setHovered(false); if (v.current) { v.current.pause(); try { v.current.currentTime = 1; } catch {} } }}
+      style={{
+        background: '#fff', borderRadius: 16, border: '1px solid #E2EAE6',
+        boxShadow: hovered ? '0 8px 24px rgba(10,46,31,0.10)' : '0 4px 12px rgba(10,46,31,0.03)',
+        position: 'relative', transition: 'box-shadow 0.2s ease, transform 0.2s ease',
+        transform: hovered ? 'translateY(-2px)' : 'none',
+      }}
+    >
+      <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#0a1f16', display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: '16px 16px 0 0' }}>
+        {assembly.output_url ? (
+          <video ref={v} src={assembly.output_url} muted loop playsInline preload="auto" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (
+          <Film size={32} color="#fff" style={{ opacity: 0.4 }} />
+        )}
+        <div style={{ position: 'relative', zIndex: 2, width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'grid', placeItems: 'center', color: C.dark, boxShadow: '0 4px 14px rgba(0,0,0,0.2)' }}>
+          <Video size={16} fill="currentColor" style={{ marginLeft: 2 }} />
+        </div>
+        <div style={{ position: 'absolute', top: 11, left: 11, zIndex: 3, background: 'rgba(234,88,12,0.92)', color: '#fff', padding: '4px 9px', borderRadius: 6, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <Scissors size={11} /> Склеено
+        </div>
+      </div>
+
+      <div style={{ padding: 16 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 4px', color: C.dark, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          Склейка {canvasLabel} · {assembly.clip_count} кл.
+        </h3>
+        <div style={{ fontSize: 12.5, color: '#6B7F74', marginBottom: 14 }}>{date}</div>
+        <div style={{ display: 'flex', gap: 8, borderTop: '1px solid #F1F5F9', paddingTop: 12 }}>
+          <a href={assembly.output_url} download target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ flex: 1, textDecoration: 'none' }}>
+            <button style={{ width: '100%', padding: 10, borderRadius: 8, border: 'none', background: '#F1F5F9', color: C.dark, fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <Download size={14} /> Скачать
+            </button>
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const menuItemStyle = {
   display: 'flex', alignItems: 'center', gap: 8, width: '100%',
   padding: '8px 12px', border: 'none', background: 'none', borderRadius: 8,
@@ -196,7 +254,7 @@ function FolderChip({ folder, active, onClick, onRename, onDelete }) {
       ) : (
         <>
           <span onClick={onClick}>{folder.name}</span>
-          <span style={{ color: C.gray400, fontWeight: 400, fontSize: 12 }}>({folder.clip_count})</span>
+          <span style={{ color: C.gray400, fontWeight: 400, fontSize: 12 }}>({(folder.clip_count || 0) + (folder.assembly_count || 0)})</span>
           <button onClick={e => { e.stopPropagation(); setEditing(true); }} style={{ border: 'none', background: 'none', cursor: 'pointer', color: C.gray400, padding: 0, display: 'grid' }}><Pencil size={12} /></button>
           <button onClick={e => { e.stopPropagation(); onDelete(folder.id); }} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#EF4444', padding: 0, display: 'grid' }}><Trash2 size={12} /></button>
         </>
@@ -208,6 +266,7 @@ function FolderChip({ folder, active, onClick, onRename, onDelete }) {
 export default function LibraryPage() {
   const navigate = useNavigate();
   const [clips, setClips] = useState([]);
+  const [assemblies, setAssemblies] = useState([]);
   const [folders, setFolders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeFolder, setActiveFolder] = useState(null);
@@ -217,6 +276,7 @@ export default function LibraryPage() {
   useEffect(() => {
     Promise.all([
       api.get('/clips').then(d => setClips(d.clips || [])),
+      api.get('/assemblies').then(d => setAssemblies(d.assemblies || [])),
       api.get('/folders').then(d => setFolders(d.folders || [])),
     ]).catch(() => {}).finally(() => setLoading(false));
   }, []);
@@ -226,7 +286,7 @@ export default function LibraryPage() {
     setCreatingFolder(true);
     try {
       const { folder } = await api.post('/folders', { name: newFolderName.trim() });
-      setFolders(prev => [{ ...folder, clip_count: 0 }, ...prev]);
+      setFolders(prev => [{ ...folder, clip_count: 0, assembly_count: 0 }, ...prev]);
       setNewFolderName('');
     } catch {}
     setCreatingFolder(false);
@@ -244,6 +304,7 @@ export default function LibraryPage() {
       await api.del(`/folders/${id}`);
       setFolders(prev => prev.filter(f => f.id !== id));
       setClips(prev => prev.map(c => c.folder_id === id ? { ...c, folder_id: null } : c));
+      setAssemblies(prev => prev.map(a => a.folder_id === id ? { ...a, folder_id: null } : a));
       if (activeFolder === id) setActiveFolder(null);
     } catch {}
   }
@@ -263,9 +324,12 @@ export default function LibraryPage() {
     }));
   }
 
-  const filtered = activeFolder
-    ? clips.filter(c => c.folder_id === activeFolder)
-    : clips;
+  const filteredClips = activeFolder ? clips.filter(c => c.folder_id === activeFolder) : clips;
+  const filteredAssemblies = activeFolder ? assemblies.filter(a => a.folder_id === activeFolder) : assemblies;
+  const filtered = [
+    ...filteredClips.map(c => ({ ...c, _type: 'clip' })),
+    ...filteredAssemblies.map(a => ({ ...a, _type: 'assembly' })),
+  ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
   return (
     <div style={{ maxWidth: 1280, margin: '0 auto', padding: '36px 24px 64px' }}>
@@ -299,7 +363,7 @@ export default function LibraryPage() {
             color: !activeFolder ? C.primaryDark : C.gray600,
           }}
         >
-          Все клипы <span style={{ color: C.gray400, fontWeight: 400, fontSize: 12 }}>({clips.length})</span>
+          Все клипы <span style={{ color: C.gray400, fontWeight: 400, fontSize: 12 }}>({clips.length + assemblies.length})</span>
         </div>
 
         {folders.map(f => (
@@ -338,7 +402,10 @@ export default function LibraryPage() {
         </div>
       ) : filtered.length > 0 ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(264px, 1fr))', gap: 22 }}>
-          {filtered.map(c => <ClipCard key={c.id} clip={c} folders={folders} onMoved={handleClipMoved} onRenamed={handleClipRenamed} />)}
+          {filtered.map(item => item._type === 'assembly'
+            ? <AssemblyCard key={`asm-${item.id}`} assembly={item} />
+            : <ClipCard key={`clip-${item.id}`} clip={item} folders={folders} onMoved={handleClipMoved} onRenamed={handleClipRenamed} />
+          )}
         </div>
       ) : (
         <div style={{ ...glassPanel, textAlign: 'center', padding: '64px 32px' }}>
