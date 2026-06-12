@@ -613,6 +613,76 @@ export async function runReconciler() {
   } catch (err) {
     console.error('[Reconciler] Error:', err);
   }
+
+  // ── S3 fallback re-upload (rescues done jobs stuck on temp fal URLs) ──
+  try {
+    await reconcileS3Fallbacks();
+  } catch (err) {
+    console.error('[Reconciler reupload] Error:', err);
+  }
+}
+
+// ── S3 fallback cycle ──
+// Picks up done jobs where reuploadToS3 failed during runAnimate (s3_fallback=true).
+// Retries up to 5 times within 24 hours, then gives up (fal URL will expire).
+
+async function reconcileS3Fallbacks() {
+  const stranded = await pool.query(
+    `SELECT id, project_id, output
+     FROM generation_jobs
+     WHERE status = 'done'
+       AND output->>'s3_fallback' = 'true'
+       AND COALESCE((output->>'reupload_attempts')::int, 0) < 5
+       AND created_at > NOW() - INTERVAL '24 hours'
+     LIMIT 5`,
+  );
+
+  for (const row of stranded.rows) {
+    const output = typeof row.output === 'string' ? JSON.parse(row.output) : row.output;
+    const attempts = (output.reupload_attempts || 0) + 1;
+
+    try {
+      const s3 = await reuploadToS3({ falUrl: output.video_url, projectId: row.project_id });
+
+      if (s3) {
+        // Success — replace fal URL with S3, drop fallback markers
+        const newOutput = { ...output, video_url: s3.s3_url };
+        delete newOutput.s3_fallback;
+        delete newOutput.reupload_attempts;
+        await pool.query(
+          `UPDATE generation_jobs SET output = $1, updated_at = NOW() WHERE id = $2`,
+          [JSON.stringify(newOutput), row.id],
+        );
+
+        // Propagate to project so assembly/player use the durable S3 URL
+        try {
+          const projRow = await pool.query('SELECT brief FROM projects WHERE id = $1', [row.project_id]);
+          if (projRow.rows.length > 0) {
+            const brief = typeof projRow.rows[0].brief === 'string'
+              ? JSON.parse(projRow.rows[0].brief) : (projRow.rows[0].brief || {});
+            await pool.query(
+              `UPDATE projects SET brief = $1, result_url = $2 WHERE id = $3`,
+              [JSON.stringify({ ...brief, video_url: s3.s3_url }), s3.s3_url, row.project_id],
+            );
+          }
+        } catch (e) {
+          console.error(`[Reconciler reupload] job ${row.id}: project update failed:`, e.message);
+        }
+
+        console.log(`[Reconciler reupload] job ${row.id}: rescued → S3`);
+      } else {
+        // reuploadToS3 returned null (all inner retries exhausted) — bump counter
+        const newOutput = { ...output, reupload_attempts: attempts };
+        await pool.query(
+          `UPDATE generation_jobs SET output = $1, updated_at = NOW() WHERE id = $2`,
+          [JSON.stringify(newOutput), row.id],
+        );
+        console.warn(`[Reconciler reupload] job ${row.id}: attempt ${attempts}/5 failed`);
+      }
+    } catch (err) {
+      console.error(`[Reconciler reupload] job ${row.id}: unexpected error:`, err.message);
+    }
+  }
 }
 
 export function startReconciler() {
