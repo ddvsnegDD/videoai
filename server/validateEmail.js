@@ -12,12 +12,12 @@ const MBV_KEY = process.env.MAILBOXVALIDATOR_API_KEY || '';
 async function checkDisposableMBV(email) {
   if (!MBV_ENABLED || !MBV_KEY) return null;
   try {
-    const url = `https://api.mailboxvalidator.com/v2/validation/single?email=${encodeURIComponent(email)}&key=${encodeURIComponent(MBV_KEY)}`;
+    const url = `https://api.mailboxvalidator.com/v2/email/disposable?format=json&email=${encodeURIComponent(email)}&key=${encodeURIComponent(MBV_KEY)}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return null;
     const data = await res.json();
     if (data.error) return null;
-    if (data.is_disposable === true) return true;
+    if (data.is_disposable === true || data.is_disposable === 'true' || data.is_disposable === 'True') return true;
     return false;
   } catch {
     return null;

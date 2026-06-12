@@ -69,7 +69,7 @@ function SiteFooter() {
         </div>
       </div>
 
-      {/* Платёжные знаки — единая высота --mark-h, gap ≥ 20px (НСПК) */}
+      {/* Платёжные знаки + способы оплаты */}
       <div style={{
         maxWidth: 1280,
         margin: '24px auto 0',
@@ -87,6 +87,26 @@ function SiteFooter() {
           loading="lazy"
           decoding="async"
         />
+        <span style={{ fontSize: '0.75rem', color: C.gray400 }}>
+          Оплата картой, СБП, SberPay, T-Pay
+        </span>
+      </div>
+
+      {/* Соцсети */}
+      <div style={{
+        maxWidth: 1280,
+        margin: '20px auto 0',
+        padding: '0 24px',
+        display: 'flex',
+        justifyContent: 'center',
+        gap: 12,
+      }}>
+        <a href="https://t.me/ddvideoai" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: '50%', background: '#E3F2FD', color: '#039BE5', transition: 'opacity 0.15s' }} title="Telegram">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>
+        </a>
+        <a href="https://vk.com/ddvideoai" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: '50%', background: '#E8EAF6', color: '#0077FF', transition: 'opacity 0.15s' }} title="ВКонтакте">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12.77 16.25h.73s.22-.02.33-.14c.1-.1.1-.31.1-.31s-.01-1.12.5-1.29c.5-.16 1.15 1.06 1.84 1.53.52.36.92.28.92.28l1.85-.03s.97-.06.51-.83c-.04-.06-.26-.58-1.33-1.63-1.12-1.1-.97-.92.38-2.82.82-1.16 1.15-1.86 1.05-2.16-.1-.29-.7-.21-.7-.21l-2.08.01s-.15-.02-.27.05c-.11.07-.18.24-.18.24s-.33.88-.76 1.63c-.92 1.58-1.29 1.66-1.44 1.56-.35-.24-.26-1.04-.26-1.6 0-1.72.26-2.44-.51-2.63-.26-.06-.44-.1-1.1-.11-.84-.01-1.55 0-1.95.2-.27.13-.47.43-.35.45.16.02.52.1.71.36.25.34.24 1.1.24 1.1s.14 2.03-.33 2.28c-.33.17-.78-.18-1.74-1.77-.44-.73-.77-1.53-.77-1.53s-.06-.16-.18-.24c-.14-.1-.34-.13-.34-.13l-1.97.01s-.3.01-.4.14c-.1.11-.01.35-.01.35s1.53 3.59 3.26 5.4c1.59 1.66 3.39 1.55 3.39 1.55z"/></svg>
+        </a>
       </div>
     </footer>
   );
