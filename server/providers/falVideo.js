@@ -1,5 +1,6 @@
 import { fal } from '@fal-ai/client';
 import { uploadBuffer } from '../storage.js';
+import { retryWithBackoff } from '../lib/retry.js';
 
 const CREDITS_WAN = Number(process.env.CREDITS_WAN) || 40;
 const CREDITS_VEO = Number(process.env.CREDITS_VEO) || 90;
@@ -153,20 +154,27 @@ export async function fetchFalResult({ modelKey, requestId }) {
 
 /**
  * Best-effort: download from fal URL and re-upload to S3.
- * Never throws — returns { s3_url } on success, null on failure.
+ * Retries up to 3 times with exponential backoff (2s → 4s → 8s).
+ * Never throws — returns { s3_url } on success, null after all attempts fail.
+ * Each attempt uses a unique S3 key (creative-${Date.now()}.mp4), so retries
+ * are idempotent — no duplicate-key conflicts, just orphan files at worst.
  */
 export async function reuploadToS3({ falUrl, projectId }) {
   try {
-    const videoRes = await fetch(falUrl);
-    if (!videoRes.ok) throw new Error(`Download failed: ${videoRes.status}`);
-    const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
+    const result = await retryWithBackoff(async () => {
+      const videoRes = await fetch(falUrl);
+      if (!videoRes.ok) throw new Error(`Download failed: ${videoRes.status}`);
+      const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
 
-    const key = `projects/${projectId}/creative-${Date.now()}.mp4`;
-    const ourUrl = await uploadBuffer({ buffer: videoBuffer, key, contentType: 'video/mp4' });
-    console.log(`[fal] Uploaded to S3: ${ourUrl} (${videoBuffer.length} bytes)`);
-    return { s3_url: ourUrl };
+      const key = `projects/${projectId}/creative-${Date.now()}.mp4`;
+      const ourUrl = await uploadBuffer({ buffer: videoBuffer, key, contentType: 'video/mp4' });
+      console.log(`[Anti-leak] Uploaded to S3: ${ourUrl} (${videoBuffer.length} bytes)`);
+      return { s3_url: ourUrl };
+    }, { retries: 3, delayMs: 2000, factor: 2, label: 'Anti-leak reupload' });
+
+    return result;
   } catch (err) {
-    console.error(`[Anti-leak] S3 re-upload failed (fal URL preserved): ${err.message}`);
+    console.error(`[Anti-leak] S3 re-upload failed after all retries (fal URL preserved): ${err.message}`);
     return null;
   }
 }
