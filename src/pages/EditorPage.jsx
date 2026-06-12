@@ -62,6 +62,7 @@ export default function EditorPage() {
 
   // Animation
   const [motion, setMotion] = useState('push_in');
+  const [motionManual, setMotionManual] = useState(false);
   const [customPrompt, setCustomPrompt] = useState('');
   const [model, setModel] = useState('wan');
   const [targetDuration, setTargetDuration] = useState(5);
@@ -79,14 +80,17 @@ export default function EditorPage() {
     api.get('/config').then(setConfig).catch(() => {});
   }, []);
 
-  // Auto-rotate motion preset based on completed animate jobs count
+  // Auto-rotate motion preset based on completed animate jobs count.
+  // Re-runs on mount AND after each animate job completes (job?.status changes).
+  // Skipped when user picked a preset manually (motionManual flag).
   useEffect(() => {
+    if (motionManual) return;
     api.get('/jobs').then(res => {
       const jobs = res.jobs || res || [];
       const doneCount = jobs.filter(j => j.type === 'animate' && j.status === 'done').length;
       setMotion(MOTIONS[doneCount % MOTIONS.length].id);
     }).catch(() => {});
-  }, []);
+  }, [job?.status, motionManual]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refresh credits on job completion
   useEffect(() => {
@@ -301,6 +305,7 @@ export default function EditorPage() {
     setSourceType('photo');
     setError('');
     setCustomPrompt('');
+    setMotionManual(false);
     setProductType('');
     setDetails('');
     setStyle('');
@@ -426,7 +431,7 @@ export default function EditorPage() {
               {MOTIONS.map(m => {
                 const on = motion === m.id && !customPrompt.trim();
                 return (
-                  <button key={m.id} onClick={() => { setMotion(m.id); setCustomPrompt(''); }} style={{ textAlign: 'left', cursor: 'pointer', padding: 14, borderRadius: 12, background: '#fff', border: on ? `2px solid ${C.primary}` : '1px solid #E2EAE6', boxShadow: on ? '0 8px 16px rgba(16,185,129,0.1)' : 'none' }}>
+                  <button key={m.id} onClick={() => { setMotion(m.id); setMotionManual(true); setCustomPrompt(''); }} style={{ textAlign: 'left', cursor: 'pointer', padding: 14, borderRadius: 12, background: '#fff', border: on ? `2px solid ${C.primary}` : '1px solid #E2EAE6', boxShadow: on ? '0 8px 16px rgba(16,185,129,0.1)' : 'none' }}>
                     <div style={{ width: 34, height: 34, borderRadius: 8, background: on ? C.primaryLight : '#F1F5F9', display: 'grid', placeItems: 'center', color: on ? C.primary : '#64748B', marginBottom: 10 }}><Video size={16} /></div>
                     <div style={{ fontWeight: 700, fontSize: 13.5, color: C.dark, marginBottom: 2 }}>{m.name}</div>
                     <div style={{ fontSize: 11.5, color: '#6B7F74', lineHeight: 1.3 }}>{m.desc}</div>
