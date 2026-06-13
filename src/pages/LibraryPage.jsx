@@ -174,9 +174,12 @@ function ClipCard({ clip, folders, onMoved, onRenamed, onDeleted }) {
   );
 }
 
-function AssemblyCard({ assembly }) {
+function AssemblyCard({ assembly, folders, onMoved, onDeleted }) {
   const v = useRef(null);
   const [hovered, setHovered] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const menuRef = useRef(null);
   const date = assembly.created_at
     ? new Date(assembly.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
     : '';
@@ -190,6 +193,37 @@ function AssemblyCard({ assembly }) {
     return () => el.removeEventListener('loadeddata', seek);
   }, [assembly.output_url]);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [menuOpen]);
+
+  async function moveToFolder(folderId) {
+    try {
+      await api.patch(`/assemblies/${assembly.id}`, { folder_id: folderId });
+      onMoved(assembly.id, folderId);
+    } catch {}
+    setMenuOpen(false);
+  }
+
+  async function handleDelete() {
+    if (!window.confirm('Удалить сборку? Видео и файлы удалятся безвозвратно.')) return;
+    setDeleting(true);
+    try {
+      await api.del(`/assemblies/${assembly.id}`);
+      onDeleted(assembly.id);
+    } catch (err) {
+      const msg = err?.error === 'assembly_processing'
+        ? 'Дождитесь завершения сборки перед удалением'
+        : 'Не удалось удалить сборку';
+      alert(msg);
+    }
+    setDeleting(false);
+    setMenuOpen(false);
+  }
+
   return (
     <div
       onMouseEnter={() => { setHovered(true); v.current?.play().catch(() => {}); }}
@@ -199,6 +233,7 @@ function AssemblyCard({ assembly }) {
         boxShadow: hovered ? '0 8px 24px rgba(10,46,31,0.10)' : '0 4px 12px rgba(10,46,31,0.03)',
         position: 'relative', transition: 'box-shadow 0.2s ease, transform 0.2s ease',
         transform: hovered ? 'translateY(-2px)' : 'none',
+        zIndex: menuOpen ? 50 : 'auto',
       }}
     >
       <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#0a1f16', display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: '16px 16px 0 0' }}>
@@ -226,6 +261,39 @@ function AssemblyCard({ assembly }) {
               <Download size={14} /> Скачать
             </button>
           </a>
+          <div ref={menuRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              style={{ padding: '10px 12px', borderRadius: 8, border: 'none', background: '#F1F5F9', color: C.gray600, cursor: 'pointer', display: 'grid', placeItems: 'center' }}
+            >
+              <MoreVertical size={14} />
+            </button>
+            {menuOpen && (
+              <div style={{
+                position: 'absolute', right: 0, bottom: '100%', marginBottom: 4, zIndex: 100,
+                background: '#fff', borderRadius: 12, border: '1px solid #E2EAE6',
+                boxShadow: '0 8px 24px rgba(10,46,31,0.12)', minWidth: 180, padding: 6, fontSize: 13,
+              }}>
+                {assembly.folder_id && (
+                  <button onClick={() => moveToFolder(null)} style={menuItemStyle}>
+                    <ChevronRight size={14} style={{ transform: 'rotate(180deg)' }} /> В корень
+                  </button>
+                )}
+                {folders.filter(f => f.id !== assembly.folder_id).map(f => (
+                  <button key={f.id} onClick={() => moveToFolder(f.id)} style={menuItemStyle}>
+                    <FolderOpen size={14} /> {f.name}
+                  </button>
+                ))}
+                {folders.length === 0 && !assembly.folder_id && (
+                  <div style={{ padding: '8px 12px', color: C.gray400, fontSize: 12 }}>Нет папок</div>
+                )}
+                <div style={{ borderTop: '1px solid #F1F5F9', margin: '4px 0' }} />
+                <button onClick={handleDelete} disabled={deleting} style={{ ...menuItemStyle, color: '#EF4444' }}>
+                  <Trash2 size={14} /> {deleting ? 'Удаление…' : 'Удалить'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -356,6 +424,27 @@ export default function LibraryPage() {
     }));
   }
 
+  function handleAssemblyDeleted(assemblyId) {
+    const deleted = assemblies.find(a => a.id === assemblyId);
+    setAssemblies(prev => prev.filter(a => a.id !== assemblyId));
+    if (deleted?.folder_id) {
+      setFolders(prev => prev.map(f =>
+        f.id === deleted.folder_id ? { ...f, assembly_count: Math.max(0, (f.assembly_count || 0) - 1) } : f
+      ));
+    }
+  }
+
+  function handleAssemblyMoved(assemblyId, folderId) {
+    const oldFolder = assemblies.find(a => a.id === assemblyId)?.folder_id;
+    setAssemblies(prev => prev.map(a => a.id === assemblyId ? { ...a, folder_id: folderId } : a));
+    setFolders(prev => prev.map(f => {
+      let count = f.assembly_count || 0;
+      if (f.id === folderId) count++;
+      if (f.id === oldFolder) count--;
+      return { ...f, assembly_count: Math.max(0, count) };
+    }));
+  }
+
   const filteredClips = activeFolder ? clips.filter(c => c.folder_id === activeFolder) : clips;
   const filteredAssemblies = activeFolder ? assemblies.filter(a => a.folder_id === activeFolder) : assemblies;
   const filtered = [
@@ -435,7 +524,7 @@ export default function LibraryPage() {
       ) : filtered.length > 0 ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(264px, 1fr))', gap: 22 }}>
           {filtered.map(item => item._type === 'assembly'
-            ? <AssemblyCard key={`asm-${item.id}`} assembly={item} />
+            ? <AssemblyCard key={`asm-${item.id}`} assembly={item} folders={folders} onMoved={handleAssemblyMoved} onDeleted={handleAssemblyDeleted} />
             : <ClipCard key={`clip-${item.id}`} clip={item} folders={folders} onMoved={handleClipMoved} onRenamed={handleClipRenamed} onDeleted={handleClipDeleted} />
           )}
         </div>

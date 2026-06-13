@@ -1236,6 +1236,65 @@ app.get('/api/assemblies/:id', requireAuth, async (req, res) => {
   }
 });
 
+app.delete('/api/assemblies/:id', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, user_id, status FROM assemblies WHERE id = $1`,
+      [req.params.id],
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'not_found' });
+    const assembly = result.rows[0];
+    if (assembly.user_id !== req.userId) return res.status(403).json({ error: 'forbidden' });
+
+    if (assembly.status === 'queued' || assembly.status === 'processing') {
+      return res.status(409).json({ error: 'assembly_processing', message: 'Дождитесь завершения сборки' });
+    }
+
+    try {
+      await deleteByPrefix(`assemblies/${req.userId}/${assembly.id}.`);
+    } catch (s3Err) {
+      console.error(`Delete assembly ${assembly.id}: S3 cleanup failed (non-blocking):`, s3Err.message);
+    }
+
+    await pool.query('DELETE FROM assemblies WHERE id = $1', [assembly.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('delete assembly error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.patch('/api/assemblies/:id', requireAuth, async (req, res) => {
+  try {
+    const assemblyId = Number(req.params.id);
+    const { folder_id } = req.body;
+
+    if (folder_id === undefined) {
+      return res.status(400).json({ error: 'nothing_to_update' });
+    }
+
+    const assembly = await pool.query(
+      `SELECT id FROM assemblies WHERE id = $1 AND user_id = $2`,
+      [assemblyId, req.userId],
+    );
+    if (assembly.rows.length === 0) return res.status(404).json({ error: 'not_found' });
+
+    if (folder_id !== null) {
+      const folder = await pool.query(
+        `SELECT id FROM folders WHERE id = $1 AND user_id = $2`,
+        [folder_id, req.userId],
+      );
+      if (folder.rows.length === 0) return res.status(404).json({ error: 'folder_not_found' });
+    }
+
+    await pool.query('UPDATE assemblies SET folder_id = $1 WHERE id = $2', [folder_id, assemblyId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('update assembly error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
 // ── Static + SPA ──
 app.use(express.static(DIST));
 app.get('/{*splat}', (_req, res) => { res.sendFile(join(DIST, 'index.html')); });
