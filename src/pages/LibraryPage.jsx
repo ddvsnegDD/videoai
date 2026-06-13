@@ -13,12 +13,13 @@ const glassPanel = {
   boxShadow: '0 16px 32px rgba(10,46,31,0.03)', padding: 24,
 };
 
-function ClipCard({ clip, folders, onMoved, onRenamed }) {
+function ClipCard({ clip, folders, onMoved, onRenamed, onDeleted }) {
   const v = useRef(null);
   const [hovered, setHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(clip.title || '');
+  const [deleting, setDeleting] = useState(false);
   const menuRef = useRef(null);
   const titleInputRef = useRef(null);
   const isVeo = clip.model === 'veo';
@@ -64,6 +65,22 @@ function ClipCard({ clip, folders, onMoved, onRenamed }) {
     setMenuOpen(false);
   }
 
+  async function handleDelete() {
+    if (!window.confirm('Удалить клип? Действие необратимо.')) return;
+    setDeleting(true);
+    try {
+      await api.del(`/projects/${clip.id}`);
+      onDeleted(clip.id);
+    } catch (err) {
+      const msg = err?.error === 'active_generation'
+        ? 'Дождитесь завершения генерации перед удалением'
+        : 'Не удалось удалить клип';
+      alert(msg);
+    }
+    setDeleting(false);
+    setMenuOpen(false);
+  }
+
   return (
     <div
       onMouseEnter={() => { setHovered(true); v.current?.play().catch(() => {}); }}
@@ -73,6 +90,7 @@ function ClipCard({ clip, folders, onMoved, onRenamed }) {
         boxShadow: hovered ? '0 8px 24px rgba(10,46,31,0.10)' : '0 4px 12px rgba(10,46,31,0.03)',
         position: 'relative', transition: 'box-shadow 0.2s ease, transform 0.2s ease',
         transform: hovered ? 'translateY(-2px)' : 'none',
+        zIndex: menuOpen ? 50 : 'auto',
       }}
     >
       <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#0a1f16', display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: '16px 16px 0 0' }}>
@@ -126,7 +144,7 @@ function ClipCard({ clip, folders, onMoved, onRenamed }) {
             </button>
             {menuOpen && (
               <div style={{
-                position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 20,
+                position: 'absolute', right: 0, bottom: '100%', marginBottom: 4, zIndex: 100,
                 background: '#fff', borderRadius: 12, border: '1px solid #E2EAE6',
                 boxShadow: '0 8px 24px rgba(10,46,31,0.12)', minWidth: 180, padding: 6, fontSize: 13,
               }}>
@@ -143,6 +161,10 @@ function ClipCard({ clip, folders, onMoved, onRenamed }) {
                 {folders.length === 0 && !clip.folder_id && (
                   <div style={{ padding: '8px 12px', color: C.gray400, fontSize: 12 }}>Нет папок</div>
                 )}
+                <div style={{ borderTop: '1px solid #F1F5F9', margin: '4px 0' }} />
+                <button onClick={handleDelete} disabled={deleting} style={{ ...menuItemStyle, color: '#EF4444' }}>
+                  <Trash2 size={14} /> {deleting ? 'Удаление…' : 'Удалить'}
+                </button>
               </div>
             )}
           </div>
@@ -313,6 +335,16 @@ export default function LibraryPage() {
     setClips(prev => prev.map(c => c.id === clipId ? { ...c, title: newTitle } : c));
   }
 
+  function handleClipDeleted(clipId) {
+    const deleted = clips.find(c => c.id === clipId);
+    setClips(prev => prev.filter(c => c.id !== clipId));
+    if (deleted?.folder_id) {
+      setFolders(prev => prev.map(f =>
+        f.id === deleted.folder_id ? { ...f, clip_count: Math.max(0, f.clip_count - 1) } : f
+      ));
+    }
+  }
+
   function handleClipMoved(clipId, folderId) {
     setClips(prev => prev.map(c => c.id === clipId ? { ...c, folder_id: folderId } : c));
     setFolders(prev => prev.map(f => {
@@ -404,7 +436,7 @@ export default function LibraryPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(264px, 1fr))', gap: 22 }}>
           {filtered.map(item => item._type === 'assembly'
             ? <AssemblyCard key={`asm-${item.id}`} assembly={item} />
-            : <ClipCard key={`clip-${item.id}`} clip={item} folders={folders} onMoved={handleClipMoved} onRenamed={handleClipRenamed} />
+            : <ClipCard key={`clip-${item.id}`} clip={item} folders={folders} onMoved={handleClipMoved} onRenamed={handleClipRenamed} onDeleted={handleClipDeleted} />
           )}
         </div>
       ) : (
