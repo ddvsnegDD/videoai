@@ -27,7 +27,7 @@ export const MOTION_PRESETS = [
   { key: 'pull_back', label: 'Отъезд', prompt: 'slow cinematic camera pull-back revealing the product, premium commercial look, smooth motion' },
   { key: 'tilt', label: 'Подъём', prompt: 'slow vertical camera tilt up the product, premium commercial product video, smooth motion' },
   { key: 'light_play', label: 'Игра света', prompt: 'minimal camera movement, focus on shifting light and reflections on the product, premium commercial look' },
-  { key: 'back_view', label: 'Вид сзади', prompt: 'slow cinematic camera push-in towards the product, subtle, premium commercial product video, smooth motion' },
+  { key: 'back_view', label: 'Вид сзади', prompt: 'smooth gentle camera movement showing the full back of the product, steady framing keeping the whole item in view, premium commercial product video, smooth motion' },
 ];
 
 export const POLL_TIMEOUT = 8 * 60 * 1000; // 8 min
