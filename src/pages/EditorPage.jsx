@@ -26,6 +26,8 @@ const MOTIONS = [
   { id: 'light_play', name: 'Игра света', desc: 'Минимум движения, акцент на бликах' },
 ];
 
+const BACK_VIEW = { id: 'back_view', name: 'Вид сзади', desc: 'Анимация отдельного фото задней стороны товара' };
+
 function ModelCard({ on, onClick, name, desc, cost, accent, accentLight, accentDark }) {
   return (
     <button onClick={onClick} style={{ flex: 1, textAlign: 'left', cursor: 'pointer', padding: 18, borderRadius: 14, background: '#fff', position: 'relative', border: on ? `2px solid ${accent}` : '1px solid #E2EAE6', boxShadow: on ? `0 8px 18px ${accent}1f` : 'none' }}>
@@ -48,6 +50,11 @@ export default function EditorPage() {
   const [imageUrl, setImageUrl] = useState(null);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
+
+  // Back-view photo
+  const [backImageUrl, setBackImageUrl] = useState(null);
+  const [backUploading, setBackUploading] = useState(false);
+  const backFileRef = useRef(null);
 
   // Text-to-image generate flow
   const [productType, setProductType] = useState('');
@@ -115,6 +122,7 @@ export default function EditorPage() {
   const isFree = (model === 'wan' && targetDuration === 5 && freeWan > 0) || (model === 'veo' && freeVeo > 0);
   const isFreeImage = freeImage > 0;
   const canAfford = isFree || credits >= modelCredits;
+  const needsBack = motion === 'back_view';
   const canAffordImage = isFreeImage || credits >= creditsImage;
 
   // Derive phase for the monitor
@@ -138,30 +146,48 @@ export default function EditorPage() {
   }
 
   const videoUrl = job?.output?.video_url;
+  const previewImageUrl = (motion === 'back_view' && backImageUrl) ? backImageUrl : imageUrl;
 
   // ── Handlers ──
 
+  async function uploadPhoto(file) {
+    if (file.size > 10 * 1024 * 1024) { setError('Максимум 10 МБ'); return null; }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { setError('Только JPG, PNG, WEBP'); return null; }
+    setError('');
+    const fd = new FormData();
+    fd.append('image', file);
+    const res = await fetch('/api/upload', { method: 'POST', body: fd, credentials: 'include' });
+    if (!res.ok) throw new Error('Upload failed');
+    return (await res.json()).url;
+  }
+
   async function handleFile(file) {
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { setError('Максимум 10 МБ'); return; }
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { setError('Только JPG, PNG, WEBP'); return; }
-
     setUploading(true);
-    setError('');
-
     try {
-      const fd = new FormData();
-      fd.append('image', file);
-      const res = await fetch('/api/upload', { method: 'POST', body: fd, credentials: 'include' });
-      if (!res.ok) throw new Error('Upload failed');
-      const data = await res.json();
-      setImageUrl(data.url);
+      const url = await uploadPhoto(file);
+      if (!url) return;
+      setImageUrl(url);
       setImageSource('upload');
       setContinueCount(0);
     } catch {
       setError('Ошибка загрузки. Попробуйте ещё раз.');
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function handleBackFile(file) {
+    if (!file) return;
+    setBackUploading(true);
+    try {
+      const url = await uploadPhoto(file);
+      if (!url) return;
+      setBackImageUrl(url);
+    } catch {
+      setError('Ошибка загрузки. Попробуйте ещё раз.');
+    } finally {
+      setBackUploading(false);
     }
   }
 
@@ -273,7 +299,7 @@ export default function EditorPage() {
         projectId: pid,
         type: 'animate',
         input: {
-          imageUrl,
+          imageUrl: needsBack ? backImageUrl : imageUrl,
           modelKey: model,
           targetDuration: model === 'wan' ? targetDuration : undefined,
           motionPrompt: customPrompt.trim() || undefined,
@@ -314,6 +340,7 @@ export default function EditorPage() {
     setImageJobId(null);
     setImageUrl(null);
     setImageSource(null);
+    setBackImageUrl(null);
     setProjectId(null);
     setContinueCount(0);
     setImagePrompt('');
@@ -443,7 +470,7 @@ export default function EditorPage() {
           <div style={{ ...glassPanel, opacity: imageUrl && !showImagePreview ? 1 : 0.5, pointerEvents: imageUrl && !showImagePreview ? 'auto' : 'none' }}>
             <h2 style={{ fontSize: 17, fontWeight: 800, margin: '0 0 14px', fontFamily: '"Manrope", sans-serif', color: C.dark }}>{stepNum('02.')} Стиль движения камеры</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-              {MOTIONS.map(m => {
+              {[...MOTIONS, BACK_VIEW].map(m => {
                 const on = motion === m.id && !customPrompt.trim();
                 return (
                   <button key={m.id} onClick={() => { setMotion(m.id); setMotionManual(true); setCustomPrompt(''); }} style={{ textAlign: 'left', cursor: 'pointer', padding: 14, borderRadius: 12, background: '#fff', border: on ? `2px solid ${C.primary}` : '1px solid #E2EAE6', boxShadow: on ? '0 8px 16px rgba(16,185,129,0.1)' : 'none' }}>
@@ -454,6 +481,36 @@ export default function EditorPage() {
                 );
               })}
             </div>
+            {motion === 'back_view' && (
+              <div style={{ marginTop: 12, padding: 16, background: '#FFF8F0', border: '1px solid #FBD9AE', borderRadius: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.dark, marginBottom: 10 }}>Загрузите фото товара сзади</div>
+                {backImageUrl ? (
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <img src={backImageUrl} alt="" style={{ width: 64, height: 64, borderRadius: 10, objectFit: 'cover' }} />
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: C.dark, margin: '0 0 4px' }}>Фото загружено</p>
+                      <button onClick={() => setBackImageUrl(null)} style={{ background: 'none', border: 'none', color: '#6B7F74', fontSize: 12, cursor: 'pointer', padding: 0 }}>Заменить</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => backFileRef.current?.click()}
+                    style={{ border: '2px dashed #E8A54B', borderRadius: 10, padding: '20px 16px', textAlign: 'center', background: '#FFFDF8', cursor: 'pointer' }}
+                  >
+                    <input ref={backFileRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={e => handleBackFile(e.target.files?.[0])} />
+                    {backUploading ? (
+                      <Loader size={22} color="#E8A54B" style={{ animation: 'va-spin 1s linear infinite', marginBottom: 6 }} />
+                    ) : (
+                      <Upload size={22} color="#E8A54B" style={{ marginBottom: 6 }} />
+                    )}
+                    <div style={{ fontWeight: 600, fontSize: 13, color: C.dark }}>
+                      {backUploading ? 'Загрузка...' : 'Перетащите или нажмите'}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: '#6B7F74' }}>JPG, PNG, WEBP · до 10 МБ</div>
+                  </div>
+                )}
+              </div>
+            )}
             <input
               placeholder="Или свой вариант (англ. промпт)"
               value={customPrompt}
@@ -511,15 +568,15 @@ export default function EditorPage() {
 
             <button
               onClick={handleCreate}
-              disabled={!imageUrl || creating || !canAfford || showImagePreview}
+              disabled={!imageUrl || creating || !canAfford || showImagePreview || (needsBack && !backImageUrl)}
               style={{
                 width: '100%', border: 'none',
-                cursor: (!imageUrl || creating || !canAfford || showImagePreview) ? 'default' : 'pointer',
+                cursor: (!imageUrl || creating || !canAfford || showImagePreview || (needsBack && !backImageUrl)) ? 'default' : 'pointer',
                 background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, color: '#fff',
                 padding: 16, borderRadius: 11, fontSize: 16, fontWeight: 700, marginTop: 14,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 boxShadow: '0 10px 24px rgba(16,185,129,0.26)',
-                opacity: (!imageUrl || creating || !canAfford || showImagePreview) ? 0.5 : 1,
+                opacity: (!imageUrl || creating || !canAfford || showImagePreview || (needsBack && !backImageUrl)) ? 0.5 : 1,
               }}
             >
               {creating ? (
@@ -555,9 +612,9 @@ export default function EditorPage() {
             {/* IMAGE READY */}
             {phase === 'ready' && imageUrl && (
               <div style={{ textAlign: 'center', padding: 20, width: '100%' }}>
-                <img src={imageUrl} alt="Исходник" style={{ width: '100%', maxWidth: 280, borderRadius: 14, marginBottom: 16, background: '#F1F5F9' }} />
+                <img src={previewImageUrl} alt="Исходник" style={{ width: '100%', maxWidth: 280, borderRadius: 14, marginBottom: 16, background: '#F1F5F9' }} />
                 <h3 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 6px', color: C.dark }}>
-                  {imageSource === 'generated' ? 'Картинка готова' : 'Фото загружено'}
+                  {needsBack && backImageUrl ? 'Фото задней стороны' : imageSource === 'generated' ? 'Картинка готова' : 'Фото загружено'}
                 </h3>
                 <p style={{ fontSize: 13, color: '#6B7F74', margin: 0 }}>Выберите движение и модель, затем запустите генерацию.</p>
               </div>
