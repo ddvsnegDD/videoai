@@ -7,6 +7,13 @@ const WATCHDOG_TIMEOUT_MIN = 20;
 const MAX_CONCURRENT_JOBS_PER_USER = 2;
 const RECONCILER_INTERVAL = 90_000; // 1.5 min
 
+function isTerminalFalError(err) {
+  if (err?.code === 'PROVIDER_ERROR') return true;
+  const s = err?.status ?? err?.falStatus;
+  if (typeof s !== 'number') return false;
+  return s >= 400 && s < 500 && s !== 404 && s !== 429;
+}
+
 // ── Seed generation ──
 
 function generateSeed() {
@@ -152,10 +159,12 @@ async function runJob(jobId) {
           console.log(`[runJob] Job ${jobId} retry failed:`, retryErr.code || '', retryErr.message);
           return await failJob(jobId, user_id, cost_credits, retryErr.message, true);
         }
+      } else if (err.code === 'POST_COMPLETED_FAIL' && isTerminalFalError(err)) {
+        console.warn(`[runJob] Job ${jobId}: POST_COMPLETED_FAIL terminal (falStatus=${err.falStatus}), refunding`);
+        return await failJob(jobId, user_id, cost_credits, err.message, true);
       } else if (err.code === 'POLL_TIMEOUT' || err.code === 'POST_COMPLETED_FAIL') {
         // POLL_TIMEOUT: fal still processing, reconciler will pick up.
-        // POST_COMPLETED_FAIL: fal COMPLETED but we can't fetch result — NO REFUND.
-        //   Reconciler will finalize (it has fal_request_id).
+        // POST_COMPLETED_FAIL (temporary): network/5xx — reconciler will retry.
         console.warn(`[runJob] Job ${jobId}: ${err.code}, leaving for reconciler (NO REFUND)`);
         await pool.query(
           `UPDATE generation_jobs SET updated_at = NOW(), last_polled_at = NOW() WHERE id = $1`,
@@ -305,9 +314,10 @@ async function runAnimate(input, jobId, seed, projectId) {
     } catch (fetchErr2) {
       // Both attempts failed. Do NOT throw (would trigger failJob+refund).
       // Signal runJob to leave job running for reconciler.
-      console.log(`[runAnimate] Job ${jobId}: fetchFalResult failed twice after COMPLETED: ${fetchErr2.message}`);
+      console.log(`[runAnimate] Job ${jobId}: fetchFalResult failed twice after COMPLETED: ${fetchErr2.message} (status=${fetchErr2.status})`);
       const err = new Error(`Post-COMPLETED fetch failed: ${fetchErr2.message}`);
       err.code = 'POST_COMPLETED_FAIL';
+      err.falStatus = fetchErr2.status;
       throw err;
     }
   }
@@ -407,25 +417,38 @@ async function failJob(jobId, userId, costCredits, errorMsg, shouldRefund = true
   if (!jobRow.rows.length) return;
   const jobData = jobRow.rows[0];
 
-  // Already handled
   if (jobData.status === 'failed' || jobData.status === 'done') {
     console.log(`[failJob] Job ${jobId}: already ${jobData.status}, skipping`);
     return;
   }
 
-  // Mark as failed
-  await pool.query(
-    `UPDATE generation_jobs SET status = 'failed', error = $1, updated_at = NOW() WHERE id = $2`,
+  // Mark as failed (conditional — only if still active)
+  const markFailed = await pool.query(
+    `UPDATE generation_jobs SET status = 'failed', error = $1, updated_at = NOW()
+     WHERE id = $2 AND status NOT IN ('failed','done') RETURNING id`,
     [errorMsg, jobId],
   );
+  if (markFailed.rows.length === 0) {
+    console.log(`[failJob] Job ${jobId}: concurrent transition, skipping`);
+    return;
+  }
 
-  // Idempotent refund: only if not already refunded AND shouldRefund is true
   if (!shouldRefund || jobData.refunded) return;
 
   let freeColumn = null;
   const input = jobData.input;
   if (input?._freeColumn && ['free_wan', 'free_veo', 'free_image'].includes(input._freeColumn)) {
     freeColumn = input._freeColumn;
+  }
+
+  // Atomic refund: claim refunded flag first, then credit — prevents double refund
+  const claim = await pool.query(
+    `UPDATE generation_jobs SET refunded = TRUE WHERE id = $1 AND refunded = false RETURNING id`,
+    [jobId],
+  );
+  if (claim.rows.length === 0) {
+    console.log(`[failJob] Job ${jobId}: refund already claimed, skipping`);
+    return;
   }
 
   if (freeColumn) {
@@ -435,9 +458,6 @@ async function failJob(jobId, userId, costCredits, errorMsg, shouldRefund = true
     await pool.query('UPDATE users SET credits = credits + $1 WHERE id = $2', [costCredits, userId]);
     console.log(`[Credits] Job ${jobId} failed: refunded ${costCredits} to user ${userId}`);
   }
-
-  // Mark as refunded
-  await pool.query('UPDATE generation_jobs SET refunded = TRUE WHERE id = $1', [jobId]);
 }
 
 // ── Watchdog (legacy — marks truly stale jobs) ──
@@ -582,7 +602,12 @@ export async function runReconciler() {
               console.log(`[Reconciler] Job ${row.id}: already finalized by runJob, skipping`);
             }
           } catch (uploadErr) {
-            console.error(`[Reconciler] Job ${row.id}: fetch/upload failed, will retry next cycle:`, uploadErr.message);
+            if (isTerminalFalError(uploadErr)) {
+              console.warn(`[Reconciler] Job ${row.id}: terminal error (status=${uploadErr.status}), failing with refund`);
+              await failJob(row.id, row.user_id, row.cost_credits, `Content rejected: ${uploadErr.message}`, true);
+            } else {
+              console.error(`[Reconciler] Job ${row.id}: fetch/upload failed, will retry next cycle:`, uploadErr.message);
+            }
           }
         } else if (status.status === 'FAILED') {
           await failJob(row.id, row.user_id, row.cost_credits, `fal FAILED: ${status.error || 'unknown'}`, true);
