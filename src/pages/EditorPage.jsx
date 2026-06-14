@@ -19,7 +19,7 @@ const glassPanel = {
 
 const MOTIONS = [
   { id: 'push_in', name: 'Мягкий наезд', desc: 'Плавное приближение к лицевой части' },
-  { id: 'pan', name: 'Панорама', desc: 'Линейный сдвиг кадра по горизонту' },
+  { id: 'pan', name: 'Вид сзади', desc: 'Показ товара с обратной стороны' },
   { id: 'orbit', name: 'Облёт', desc: 'Камера плавно облетает вокруг товара' },
   { id: 'pull_back', name: 'Отъезд', desc: 'Плавное удаление от товара' },
   { id: 'tilt', name: 'Подъём', desc: 'Вертикальное движение камеры снизу вверх' },
@@ -469,7 +469,7 @@ export default function EditorPage() {
               <ModelCard on={model === 'wan'} onClick={() => setModel('wan')}
                 name="Эконом · Kling 2.5"
                 desc={`Клип ${targetDuration} сек. Жёсткое удержание шрифта и геометрии товара. Формат 9:16.`}
-                cost={isFree ? `${freeWan} бесплатно` : `${modelCredits} кредитов`}
+                cost={targetDuration === 5 && freeWan > 0 ? `${freeWan} бесплатно` : `${targetDuration * 8} кредитов`}
                 accent={C.primary} accentLight={C.primaryLight} accentDark={C.primaryDark} />
               <ModelCard on={model === 'veo'} onClick={() => setModel('veo')}
                 name="Премиум · Veo 3.1"

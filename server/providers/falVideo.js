@@ -22,7 +22,7 @@ export const VIDEO_MODELS = {
 
 export const MOTION_PRESETS = [
   { key: 'push_in', label: 'Мягкий наезд', prompt: 'slow cinematic camera push-in towards the product, subtle, premium commercial product video, smooth motion' },
-  { key: 'pan', label: 'Панорама', prompt: 'smooth horizontal camera pan across the product, premium commercial product video, steady motion' },
+  { key: 'pan', label: 'Вид сзади', prompt: 'camera smoothly rotates around to reveal the back of the product, premium commercial product video, smooth controlled motion' },
   { key: 'orbit', label: 'Облёт', prompt: 'camera slowly orbits around the product, premium commercial product video, smooth controlled motion' },
   { key: 'pull_back', label: 'Отъезд', prompt: 'slow cinematic camera pull-back revealing the product, premium commercial look, smooth motion' },
   { key: 'tilt', label: 'Подъём', prompt: 'slow vertical camera tilt up the product, premium commercial product video, smooth motion' },
