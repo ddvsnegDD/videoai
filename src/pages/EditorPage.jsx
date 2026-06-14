@@ -67,6 +67,7 @@ export default function EditorPage() {
   const [model, setModel] = useState('wan');
   const [targetDuration, setTargetDuration] = useState(5);
   const [projectId, setProjectId] = useState(null);
+  const [continueCount, setContinueCount] = useState(0);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const [jobId, setJobId] = useState(null);
@@ -80,17 +81,12 @@ export default function EditorPage() {
     api.get('/config').then(setConfig).catch(() => {});
   }, []);
 
-  // Auto-rotate motion preset based on completed animate jobs count.
-  // Re-runs on mount AND after each animate job completes (job?.status changes).
-  // Skipped when user picked a preset manually (motionManual flag).
+  // Auto-rotate motion preset based on local continue count (per product).
+  // Resets to 0 on new photo/product, increments on each "Continue (another angle)".
   useEffect(() => {
     if (motionManual) return;
-    api.get('/jobs').then(res => {
-      const jobs = res.jobs || res || [];
-      const doneCount = jobs.filter(j => j.type === 'animate' && j.status === 'done').length;
-      setMotion(MOTIONS[doneCount % MOTIONS.length].id);
-    }).catch(() => {});
-  }, [job?.status, motionManual]); // eslint-disable-line react-hooks/exhaustive-deps
+    setMotion(MOTIONS[continueCount % MOTIONS.length].id);
+  }, [continueCount, motionManual]);
 
   // Refresh credits on job completion
   useEffect(() => {
@@ -102,6 +98,7 @@ export default function EditorPage() {
     if (imageJob?.status === 'done' && imageJob?.output?.image_url) {
       setImageUrl(imageJob.output.image_url);
       setImageSource('generated');
+      setContinueCount(0);
       setShowImagePreview(true);
       refresh();
     }
@@ -160,6 +157,7 @@ export default function EditorPage() {
       const data = await res.json();
       setImageUrl(data.url);
       setImageSource('upload');
+      setContinueCount(0);
     } catch {
       setError('Ошибка загрузки. Попробуйте ещё раз.');
     } finally {
@@ -227,6 +225,7 @@ export default function EditorPage() {
     setError('');
     setImageUrl(null);
     setImageSource(null);
+    setContinueCount(0);
 
     try {
       const jobRes = await api.post('/jobs', {
@@ -261,8 +260,9 @@ export default function EditorPage() {
       let pid = projectId;
 
       if (!pid) {
+        const motionName = MOTIONS.find(m => m.id === motion)?.name || '';
         const proj = await api.post('/projects', {
-          title: `Креатив ${new Date().toLocaleDateString('ru-RU')}`,
+          title: `Креатив ${new Date().toLocaleDateString('ru-RU')}${motionName ? ` · ${motionName}` : ''}`,
           brief: { source: 'upload', image_url: imageUrl, model, motion },
         });
         pid = proj.project.id;
@@ -297,12 +297,14 @@ export default function EditorPage() {
 
   function handleContinue() {
     setJobId(null);
+    setProjectId(null);
+    setContinueCount(c => c + 1);
     setError('');
     setCustomPrompt('');
     setMotionManual(false);
     setShowRegenConfirm(false);
     setShowImagePreview(false);
-    // imageUrl, sourceType, model, targetDuration, projectId — сохраняем
+    // imageUrl, sourceType, model, targetDuration — сохраняем
     // productType, details, style — сохраняем (описание того же товара)
     refresh();
   }
@@ -313,6 +315,7 @@ export default function EditorPage() {
     setImageUrl(null);
     setImageSource(null);
     setProjectId(null);
+    setContinueCount(0);
     setImagePrompt('');
     setSourceType('photo');
     setError('');

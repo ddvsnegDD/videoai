@@ -179,7 +179,7 @@ async function runJob(jobId) {
           if (type === 'animate' && result.video_url) {
             await pool.query(
               `UPDATE projects SET brief = $1, result_url = $2, status = 'ready' WHERE id = $3`,
-              [JSON.stringify({ ...brief, video_url: result.video_url, seed }), result.video_url, project_id],
+              [JSON.stringify({ ...brief, video_url: result.video_url, seed, model: input.modelKey || brief.model }), result.video_url, project_id],
             );
           } else if (type === 'image' && result.image_url) {
             await pool.query(
