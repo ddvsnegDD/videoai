@@ -33,7 +33,7 @@ export async function applyWatermark({ inputPath, outputPath }) {
     '-i', inputPath,
     '-filter_complex',
       `color=c=black@0.0:s=207x185,format=rgba,` +
-      `drawtext=fontfile=${FONT_PATH}:text='VidFlex AI':fontsize=18:fontcolor=white@0.22:x=(w-text_w)/2:y=(h-text_h)/2,` +
+      `drawtext=fontfile=${FONT_PATH}:text='VidFlex AI':fontsize=18:fontcolor=white@0.55:borderw=2:bordercolor=black@0.5:x=(w-text_w)/2:y=(h-text_h)/2,` +
       `rotate=-0.5:c=black@0.0:ow=207:oh=185[cell];` +
       `[cell]tile=6x8[grid];` +
       `[0:v][grid]overlay=0:0:format=auto:shortest=1,format=yuv420p[out]`,
