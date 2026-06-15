@@ -17,7 +17,8 @@ const POLL_INTERVAL = 3000;
 const MAX_POLLS = 100;
 
 function ClipThumb({ clip, selected, onToggle }) {
-  const isVeo = clip.model === 'veo';
+  const modelLabel = clip.model === 'veo' ? 'Veo' : clip.model === 'cosmos' ? 'Cosmos' : 'Kling';
+  const modelBadgeBg = clip.model === 'veo' ? 'rgba(99,102,241,0.9)' : clip.model === 'cosmos' ? 'rgba(245,158,11,0.9)' : 'rgba(10,46,31,0.8)';
   return (
     <div
       onClick={onToggle}
@@ -36,8 +37,8 @@ function ClipThumb({ clip, selected, onToggle }) {
             <Film size={20} />
           </div>
         )}
-        <div style={{ position: 'absolute', top: 6, left: 6, background: isVeo ? 'rgba(99,102,241,0.9)' : 'rgba(10,46,31,0.8)', color: '#fff', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 }}>
-          {isVeo ? 'Veo' : 'Kling'}
+        <div style={{ position: 'absolute', top: 6, left: 6, background: modelBadgeBg, color: '#fff', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 }}>
+          {modelLabel}
         </div>
         {selected && (
           <div style={{ position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: '50%', background: C.primary, display: 'grid', placeItems: 'center' }}>

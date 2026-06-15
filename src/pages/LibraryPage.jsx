@@ -22,7 +22,8 @@ function ClipCard({ clip, folders, onMoved, onRenamed, onDeleted }) {
   const [deleting, setDeleting] = useState(false);
   const menuRef = useRef(null);
   const titleInputRef = useRef(null);
-  const isVeo = clip.model === 'veo';
+  const modelLabel = clip.model === 'veo' ? 'Veo 3.1' : clip.model === 'cosmos' ? 'Cosmos' : 'Kling 2.5';
+  const modelBadgeBg = clip.model === 'veo' ? 'rgba(99,102,241,0.92)' : clip.model === 'cosmos' ? 'rgba(245,158,11,0.92)' : 'rgba(10,46,31,0.82)';
   const date = clip.created_at
     ? new Date(clip.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
     : '';
@@ -98,8 +99,8 @@ function ClipCard({ clip, folders, onMoved, onRenamed, onDeleted }) {
         <div style={{ position: 'relative', zIndex: 2, width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', display: 'grid', placeItems: 'center', color: C.dark, boxShadow: '0 4px 14px rgba(0,0,0,0.2)' }}>
           <Video size={16} fill="currentColor" style={{ marginLeft: 2 }} />
         </div>
-        <div style={{ position: 'absolute', top: 11, left: 11, zIndex: 3, background: isVeo ? 'rgba(99,102,241,0.92)' : 'rgba(10,46,31,0.82)', color: '#fff', padding: '4px 9px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>
-          {isVeo ? 'Veo 3.1' : 'Kling 2.5'}
+        <div style={{ position: 'absolute', top: 11, left: 11, zIndex: 3, background: modelBadgeBg, color: '#fff', padding: '4px 9px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>
+          {modelLabel}
         </div>
       </div>
 

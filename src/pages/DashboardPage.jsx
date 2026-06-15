@@ -22,7 +22,8 @@ function ProjectCard({ p, onDelete }) {
   const thumbUrl = brief?.image_url;
   const hasVideo = !!videoUrl;
   const modelKey = brief?.model || 'wan';
-  const isVeo = modelKey === 'veo';
+  const modelLabel = modelKey === 'veo' ? 'Veo 3.1' : modelKey === 'cosmos' ? 'Cosmos' : 'Kling 2.5';
+  const modelBadgeBg = modelKey === 'veo' ? 'rgba(99,102,241,0.92)' : modelKey === 'cosmos' ? 'rgba(245,158,11,0.92)' : 'rgba(10,46,31,0.82)';
   const date = p.created_at
     ? new Date(p.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
     : '';
@@ -60,7 +61,7 @@ function ProjectCard({ p, onDelete }) {
             <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', marginTop: 6 }}>Рендеринг ИИ...</div>
           </div>
         )}
-        <div style={{ position: 'absolute', top: 11, left: 11, zIndex: 3, background: isVeo ? 'rgba(99,102,241,0.92)' : 'rgba(10,46,31,0.82)', color: '#fff', padding: '4px 9px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>{isVeo ? 'Veo 3.1' : 'Kling 2.5'}</div>
+        <div style={{ position: 'absolute', top: 11, left: 11, zIndex: 3, background: modelBadgeBg, color: '#fff', padding: '4px 9px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>{modelLabel}</div>
       </div>
 
       <div style={{ padding: 16 }}>

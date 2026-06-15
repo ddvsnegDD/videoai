@@ -6,7 +6,7 @@ import { resolve, join } from 'path';
 import pool, { initDB } from './server/db.js';
 import { sendCode, verifyCode, requireAuth, getMe } from './server/auth.js';
 import { createJob, getJob, listJobs, runWatchdog, startReconciler } from './server/jobs.js';
-import { VIDEO_MODELS, MOTION_PRESETS } from './server/providers/falVideo.js';
+import { VIDEO_MODELS, MOTION_PRESETS, COSMOS_PRESETS } from './server/providers/falVideo.js';
 import { IMAGE_MODEL } from './server/providers/falImage.js';
 import { uploadBuffer, deleteByPrefix } from './server/storage.js';
 import { startAssemblyWorker, MAX_CLIPS, MAX_DURATION_SEC } from './server/assembly.js';
@@ -589,8 +589,9 @@ app.post('/api/jobs', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'missing_animate_fields' });
       }
       if (!input.motionPrompt) {
-        const preset = MOTION_PRESETS.find(p => p.key === input.motionKey);
-        input.motionPrompt = preset?.prompt || MOTION_PRESETS[0].prompt;
+        const presets = input.modelKey === 'cosmos' ? COSMOS_PRESETS : MOTION_PRESETS;
+        const preset = presets.find(p => p.key === input.motionKey);
+        input.motionPrompt = preset?.prompt || presets[0].prompt;
       }
       const model = VIDEO_MODELS[input.modelKey];
       if (!model) return res.status(400).json({ error: 'invalid_model' });
@@ -613,6 +614,19 @@ app.post('/api/jobs', requireAuth, async (req, res) => {
           input: { ...input, projectId, durationSec: String(targetDuration) },
           costCredits: hasFree ? 0 : wanCredits,
           freeColumn: hasFree ? 'free_wan' : null,
+        });
+        return res.json({ jobId });
+      }
+
+      // Cosmos: fixed 10s, no free trial
+      if (input.modelKey === 'cosmos') {
+        const { jobId } = await createJob({
+          userId: req.userId,
+          projectId,
+          type,
+          input: { ...input, projectId },
+          costCredits: model.credits,
+          freeColumn: null,
         });
         return res.json({ jobId });
       }
