@@ -338,6 +338,41 @@ async function runAnimate(input, jobId, seed, projectId) {
     output.s3_fallback = true;
   }
 
+  // Step 7: Watermark for free-trial clips (best-effort, never fails the job)
+  if (input._freeColumn) {
+    try {
+      const { applyWatermark } = await import('./watermark.js');
+      const { uploadBuffer } = await import('./storage.js');
+      const { writeFile, readFile, unlink } = await import('fs/promises');
+      const { tmpdir } = await import('os');
+      const { join } = await import('path');
+
+      const uid = crypto.randomUUID().slice(0, 12);
+      const dir = tmpdir();
+      const srcPath = join(dir, `${uid}-src.mp4`);
+      const wmPath = join(dir, `${uid}-wm.mp4`);
+
+      try {
+        const videoRes = await fetch(output.video_url);
+        if (!videoRes.ok) throw new Error(`Download failed: ${videoRes.status}`);
+        await writeFile(srcPath, Buffer.from(await videoRes.arrayBuffer()));
+
+        await applyWatermark({ inputPath: srcPath, outputPath: wmPath });
+
+        const wmBuffer = await readFile(wmPath);
+        const wmKey = `projects/${projectId}/creative-wm-${Date.now()}.mp4`;
+        const wmUrl = await uploadBuffer({ buffer: wmBuffer, key: wmKey, contentType: 'video/mp4' });
+        output.video_url = wmUrl;
+        console.log(`[runAnimate] Job ${jobId}: watermark applied (free trial)`);
+      } finally {
+        await unlink(srcPath).catch(() => {});
+        await unlink(wmPath).catch(() => {});
+      }
+    } catch (wmErr) {
+      console.warn(`[runAnimate] Job ${jobId}: watermark failed, keeping clean video: ${wmErr.message}`);
+    }
+  }
+
   await progress(95);
   return output;
 }
