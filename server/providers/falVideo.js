@@ -89,8 +89,8 @@ export async function submitToFal({ imageUrl, modelKey, motionPrompt, seed, dura
     submitInput = {
       image_url: imageUrl,
       prompt: promptText,
-      num_frames: 160,
-      fps: 16,
+      num_frames: 189,
+      fps: 24,
       image_size: { width: 480, height: 832 },
       negative_prompt: COSMOS_NEGATIVE_PROMPT,
       enable_agentic_generation: false,

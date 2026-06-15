@@ -530,7 +530,7 @@ export default function EditorPage() {
                 accent={C.primary} accentLight={C.primaryLight} accentDark={C.primaryDark} />
               <ModelCard on={model === 'cosmos'} onClick={() => setModel('cosmos')}
                 name="Стандарт · Cosmos"
-                desc="Клип 10 сек. Детальное следование промпту. Формат 9:16."
+                desc="Клип 8 сек. Детальное следование промпту. Формат 9:16."
                 cost={`${config?.video_models?.cosmos?.credits ?? 75} кредитов`}
                 accent="#F59E0B" accentLight="#FFFBEB" accentDark="#B45309" />
               <ModelCard on={model === 'veo'} onClick={() => setModel('veo')}
@@ -739,7 +739,7 @@ export default function EditorPage() {
               <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ position: 'relative', width: '100%', aspectRatio: '9 / 16', maxHeight: 400, borderRadius: 12, overflow: 'hidden', background: '#000', margin: '0 auto 16px' }}>
                   <video src={videoUrl} controls autoPlay loop muted playsInline style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                  <div style={{ position: 'absolute', top: 12, left: 12, background: 'rgba(0,0,0,0.62)', color: '#fff', padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>{model === 'veo' ? 'Veo 3.1 · 8s' : model === 'cosmos' ? 'Cosmos · 10s' : `Kling 2.5 · ${targetDuration}s`}</div>
+                  <div style={{ position: 'absolute', top: 12, left: 12, background: 'rgba(0,0,0,0.62)', color: '#fff', padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>{model === 'veo' ? 'Veo 3.1 · 8s' : model === 'cosmos' ? 'Cosmos · 8s' : `Kling 2.5 · ${targetDuration}s`}</div>
                 </div>
                 <a href={videoUrl} download target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
                   <button style={{ width: '100%', border: 'none', background: C.dark, color: '#fff', padding: 14, borderRadius: 11, fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Download size={16} /> Скачать готовый креатив (MP4)</button>
