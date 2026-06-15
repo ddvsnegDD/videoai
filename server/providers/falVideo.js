@@ -4,7 +4,7 @@ import { retryWithBackoff } from '../lib/retry.js';
 
 const CREDITS_WAN = Number(process.env.CREDITS_WAN) || 40;
 const CREDITS_VEO = Number(process.env.CREDITS_VEO) || 90;
-const CREDITS_COSMOS = Number(process.env.CREDITS_COSMOS) || 75;
+const CREDITS_COSMOS = Number(process.env.CREDITS_COSMOS) || 60;
 
 export const VIDEO_MODELS = {
   wan: {
