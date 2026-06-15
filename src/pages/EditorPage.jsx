@@ -562,6 +562,13 @@ export default function EditorPage() {
               </div>
             )}
 
+            {model === 'veo' && imageUrl && (
+              <div style={{ display: 'flex', gap: 10, background: '#FFF8F0', border: '1px solid #FBD9AE', padding: 12, borderRadius: 10, fontSize: 12.5, color: '#8A5A18', lineHeight: 1.45, marginTop: 14 }}>
+                <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+                <div>Veo иногда отклоняет фото с людьми. Если на снимке есть человек — надёжнее выбрать Kling. Если Veo не справится, кредиты вернутся автоматически.</div>
+              </div>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, fontSize: 13, color: '#6B7F74' }}>
               <span>{isFree ? <strong style={{ color: C.primary }}>Бесплатно (пробная генерация)</strong> : `Стоимость: ${modelCredits} кр. · Баланс: ${credits}`}</span>
             </div>
