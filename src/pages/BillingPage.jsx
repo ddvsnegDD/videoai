@@ -2,26 +2,17 @@
 // Sprint C merge: пакеты + оплата через ЮKassa
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Check, CreditCard, ShieldCheck, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { Check, CreditCard, ShieldCheck, CheckCircle } from 'lucide-react';
 import { C } from '../lib/theme';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { PACKAGES } from '../data/tariffs';
-
-const STATUS_MAP = {
-  pending: { label: 'Ожидает', icon: Clock, color: C.gray400 },
-  completed: { label: 'Оплачен', icon: CheckCircle, color: C.primary },
-  canceled: { label: 'Отменён', icon: AlertCircle, color: C.gray400 },
-  mismatch: { label: 'Ошибка суммы', icon: AlertCircle, color: C.danger },
-};
 
 export default function BillingPage() {
   const { user, refresh } = useAuth();
   const [searchParams] = useSearchParams();
   const [buying, setBuying] = useState(null);
   const [error, setError] = useState('');
-  const [history, setHistory] = useState([]);
-  const [historyLoading, setHistoryLoading] = useState(true);
 
   const [emailModal, setEmailModal] = useState(false);
   const [emailInput, setEmailInput] = useState('');
@@ -33,10 +24,6 @@ export default function BillingPage() {
 
   useEffect(() => {
     if (justPaid) refresh();
-    api.get('/payments/history')
-      .then(d => setHistory(d.payments || []))
-      .catch(() => {})
-      .finally(() => setHistoryLoading(false));
   }, []);
 
   async function proceedToPay(pkg) {
@@ -217,22 +204,6 @@ export default function BillingPage() {
           </div>
         </div>
 
-        {/* Payment history */}
-        <section style={{ maxWidth: 760, margin: '0 auto' }}>
-          <h2 style={{ fontFamily: '"Manrope", sans-serif', fontSize: 18, fontWeight: 700, color: C.dark, marginBottom: 16 }}>
-            История платежей
-          </h2>
-          {historyLoading ? (
-            <div className="spinner" style={{ margin: '24px auto' }} />
-          ) : history.length === 0 ? (
-            <p style={{ color: C.gray400, fontSize: 14 }}>Платежей пока нет.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {history.map(p => <PaymentRow key={p.id} payment={p} />)}
-            </div>
-          )}
-        </section>
-
         <p style={{ color: C.gray300, fontSize: 12, marginTop: 40, lineHeight: 1.5, textAlign: 'center' }}>
           Оплата через ЮKassa. Кредиты начисляются автоматически после подтверждения платежа. Не является публичной офертой.
         </p>
@@ -303,41 +274,6 @@ export default function BillingPage() {
           </form>
         </div>
       )}
-    </div>
-  );
-}
-
-function PaymentRow({ payment }) {
-  const statusInfo = STATUS_MAP[payment.status] || STATUS_MAP.pending;
-  const StatusIcon = statusInfo.icon;
-  const pkg = PACKAGES.find(p => p.id === payment.package_id);
-  const date = new Date(payment.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
-
-  return (
-    <div style={{
-      background: '#fff', border: `1px solid ${C.gray200}`, borderRadius: 12,
-      padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
-    }}>
-      <StatusIcon size={16} color={statusInfo.color} style={{ flexShrink: 0 }} />
-      <div style={{ flex: 1, minWidth: 120 }}>
-        <p style={{ fontSize: 14, fontWeight: 600, color: C.dark }}>
-          {pkg?.title || payment.package_id}
-        </p>
-        <p style={{ color: C.gray400, fontSize: 12 }}>{date}</p>
-      </div>
-      <div style={{ textAlign: 'right' }}>
-        <p style={{ fontSize: 14, fontWeight: 700, color: C.dark }}>
-          {payment.paid_amount ?? payment.expected_amount} ₽
-        </p>
-        {payment.credits_granted && (
-          <p style={{ color: C.primary, fontSize: 12, fontWeight: 600 }}>
-            +{payment.credits_granted} кр.
-          </p>
-        )}
-      </div>
-      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: `${statusInfo.color}20`, color: statusInfo.color, fontWeight: 600 }}>
-        {statusInfo.label}
-      </span>
     </div>
   );
 }

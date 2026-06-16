@@ -3,7 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import { C } from '../lib/theme';
-import { LogOut, Mail, User, Sparkles, Zap, Link2, Unlink, ShieldCheck } from 'lucide-react';
+import { LogOut, Mail, User, Sparkles, Zap, Link2, Unlink, ShieldCheck, Receipt, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { PACKAGES } from '../data/tariffs';
 
 const YANDEX_ICON = (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -18,6 +19,13 @@ const VK_ICON = (
     <path d="M12.77 16.25h.73s.22-.02.33-.14c.1-.1.1-.31.1-.31s-.01-1.12.5-1.29c.5-.16 1.15 1.06 1.84 1.53.52.36.92.28.92.28l1.85-.03s.97-.06.51-.83c-.04-.06-.26-.58-1.33-1.63-1.12-1.1-.97-.92.38-2.82.82-1.16 1.15-1.86 1.05-2.16-.1-.29-.7-.21-.7-.21l-2.08.01s-.15-.02-.27.05c-.11.07-.18.24-.18.24s-.33.88-.76 1.63c-.92 1.58-1.29 1.66-1.44 1.56-.35-.24-.26-1.04-.26-1.6 0-1.72.26-2.44-.51-2.63-.26-.06-.44-.1-1.1-.11-.84-.01-1.55 0-1.95.2-.27.13-.47.43-.35.45.16.02.52.1.71.36.25.34.24 1.1.24 1.1s.14 2.03-.33 2.28c-.33.17-.78-.18-1.74-1.77-.44-.73-.77-1.53-.77-1.53s-.06-.16-.18-.24c-.14-.1-.34-.13-.34-.13l-1.97.01s-.3.01-.4.14c-.1.11-.01.35-.01.35s1.53 3.59 3.26 5.4c1.59 1.66 3.39 1.55 3.39 1.55z" fill="#fff"/>
   </svg>
 );
+
+const STATUS_MAP = {
+  pending: { label: 'Ожидает', icon: Clock, color: C.gray400 },
+  completed: { label: 'Оплачен', icon: CheckCircle, color: C.primary },
+  canceled: { label: 'Отменён', icon: AlertCircle, color: C.gray400 },
+  mismatch: { label: 'Ошибка суммы', icon: AlertCircle, color: C.danger },
+};
 
 const PROVIDER_META = {
   yandex: { label: 'Яндекс ID', icon: YANDEX_ICON, color: '#FC3F1D' },
@@ -42,6 +50,9 @@ export default function AccountPage() {
   const [unlinking, setUnlinking] = useState(null); // provider being unlinked
   const [linkMsg, setLinkMsg] = useState(''); // success/error message
   const [linkMsgType, setLinkMsgType] = useState('success'); // 'success' | 'error'
+
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
 
   // Handle link/unlink query params from OAuth redirect
   useEffect(() => {
@@ -72,6 +83,13 @@ export default function AccountPage() {
       setTimeout(() => setLinkMsg(''), 7000);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    api.get('/payments/history')
+      .then(d => setHistory(d.payments || []))
+      .catch(() => {})
+      .finally(() => setHistoryLoading(false));
+  }, []);
 
   // Identities from server
   const identities = user?.identities || [];
@@ -409,6 +427,22 @@ export default function AccountPage() {
         )}
       </div>
 
+      {/* Payment history */}
+      <div style={card}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: C.dark, marginBottom: 16 }}>
+          <Receipt size={16} style={{ marginRight: 6, verticalAlign: -3 }} />История платежей
+        </div>
+        {historyLoading ? (
+          <div className="spinner" style={{ margin: '24px auto' }} />
+        ) : history.length === 0 ? (
+          <p style={{ color: C.gray400, fontSize: 14 }}>Платежей пока нет.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {history.map(p => <PaymentRow key={p.id} payment={p} />)}
+          </div>
+        )}
+      </div>
+
       {/* Logout */}
       <button
         onClick={() => logout && logout()}
@@ -423,6 +457,41 @@ export default function AccountPage() {
       >
         <LogOut size={18} /> Выйти из аккаунта
       </button>
+    </div>
+  );
+}
+
+function PaymentRow({ payment }) {
+  const statusInfo = STATUS_MAP[payment.status] || STATUS_MAP.pending;
+  const StatusIcon = statusInfo.icon;
+  const pkg = PACKAGES.find(p => p.id === payment.package_id);
+  const date = new Date(payment.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  return (
+    <div style={{
+      background: '#fff', border: `1px solid ${C.gray200}`, borderRadius: 12,
+      padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+    }}>
+      <StatusIcon size={16} color={statusInfo.color} style={{ flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 120 }}>
+        <p style={{ fontSize: 14, fontWeight: 600, color: C.dark }}>
+          {pkg?.title || payment.package_id}
+        </p>
+        <p style={{ color: C.gray400, fontSize: 12 }}>{date}</p>
+      </div>
+      <div style={{ textAlign: 'right' }}>
+        <p style={{ fontSize: 14, fontWeight: 700, color: C.dark }}>
+          {payment.paid_amount ?? payment.expected_amount} ₽
+        </p>
+        {payment.credits_granted && (
+          <p style={{ color: C.primary, fontSize: 12, fontWeight: 600 }}>
+            +{payment.credits_granted} кр.
+          </p>
+        )}
+      </div>
+      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: `${statusInfo.color}20`, color: statusInfo.color, fontWeight: 600 }}>
+        {statusInfo.label}
+      </span>
     </div>
   );
 }
