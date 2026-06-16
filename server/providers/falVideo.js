@@ -1,10 +1,66 @@
 import { fal } from '@fal-ai/client';
 import { uploadBuffer } from '../storage.js';
 import { retryWithBackoff } from '../lib/retry.js';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const CREDITS_WAN = Number(process.env.CREDITS_WAN) || 40;
 const CREDITS_VEO = Number(process.env.CREDITS_VEO) || 90;
 const CREDITS_COSMOS = Number(process.env.CREDITS_COSMOS) || 60;
+
+// --- Fallback prompts (used only if prompts.video.json fails to load) ---
+const FALLBACK_NEGATIVES = {
+  wan: 'blur, distort, low quality, warped text, distorted lettering, deformed logo',
+  veo: 'low quality, distortion, warping, blurry',
+  cosmos: 'text morphing, logo distortion, mutated text, scrambled letters, melting geometry, warping shapes, morphing objects, macroblocking artifacts, chromatic aberration, high-frequency noise, rolling shutter distortion, motion blur, shaky footage, low resolution, grainy texture, pixelation, poor lighting, underexposed, overexposed, washed out colors, color banding, choppy or jerky movement, low frame rate, unnatural transitions, jump cuts, flickering, moiré patterns, edge halos, temporal aliasing, deformation, distortion, changes to product color or details, extra objects, fake or unconvincing visuals, overall poor quality',
+};
+const FALLBACK_MOTION_WAN = {
+  push_in: { label: 'Мягкий наезд', prompt: 'slow cinematic camera push-in towards the product, subtle, premium commercial product video, smooth motion' },
+  pan: { label: 'Панорама', prompt: 'smooth horizontal camera pan along the product, steady lateral tracking movement, no rotation, no orbit, premium commercial product video' },
+  orbit: { label: 'Облёт', prompt: 'camera slowly orbits around the product, premium commercial product video, smooth controlled motion' },
+  pull_back: { label: 'Отъезд', prompt: 'slow cinematic camera pull-back revealing the product, premium commercial look, smooth motion' },
+  tilt: { label: 'Подъём', prompt: 'slow vertical camera tilt up the product, premium commercial product video, smooth motion' },
+  light_play: { label: 'Игра света', prompt: 'minimal camera movement, focus on shifting light and reflections on the product, premium commercial look' },
+  back_view: { label: 'Вид сзади', prompt: 'smooth gentle camera movement showing the full back of the product, steady framing keeping the whole item in view, premium commercial product video, smooth motion' },
+};
+const FALLBACK_MOTION_COSMOS = {
+  push_in: { label: 'Мягкий наезд', prompt: 'Create a cinematic product video based on the reference image. The camera performs a slow, smooth dolly push-in toward the product, gently emphasizing its front details. Keep the product perfectly unchanged: maintain strict structural integrity, preserving the exact design, materials, texture, text, logo placement, shape, and proportions. Clean white studio background, soft diffused lighting, subtle shadows, premium commercial aesthetics. Elegant, polished, high-end advertising look. No deformation, no extra objects, no camera shake, no distortion, no changes to the product\'s color or details.' },
+  pan: { label: 'Панорама', prompt: 'Create a cinematic product video based on the reference image. The camera performs a smooth horizontal lateral truck shot along the product, steady side-to-side tracking with no rotation and no orbit. Keep the product perfectly unchanged: maintain strict structural integrity, preserving the exact design, materials, texture, text, logo placement, shape, and proportions. Clean white studio background, soft diffused lighting, subtle shadows, premium commercial aesthetics. Elegant, polished, high-end look. No deformation, no extra objects, no camera shake, no distortion, no changes to the product\'s color or details.' },
+  orbit: { label: 'Облёт', prompt: 'Create a cinematic product video based on the reference image. The camera performs a slow, smooth, elegant arc shot and partial orbit around the product, starting from a front three-quarter angle and gradually revealing the side and dimensional profile. Keep the product perfectly unchanged: maintain strict structural integrity, preserving the exact design, materials, texture, text, logo placement, shape, and proportions. Clean white studio background, soft diffused lighting, subtle shadows, premium commercial product photography aesthetics. High-end luxury advertising look. No deformation, no extra objects, no camera shake, no distortion, no changes to the product\'s color or details.' },
+  pull_back: { label: 'Отъезд', prompt: 'Create a cinematic product video based on the reference image. The camera performs a slow, smooth dolly pull-back, gradually revealing the full product and its clean presentation in the frame. Keep the product perfectly unchanged: maintain strict structural integrity, preserving the exact design, materials, texture, text, logo placement, shape, and proportions. Clean white studio background, soft diffused lighting, subtle shadows, premium commercial aesthetics. Elegant, polished, high-end look. No deformation, no extra objects, no camera shake, no distortion, no changes to the product\'s color or details.' },
+  tilt: { label: 'Подъём', prompt: 'Create a cinematic product video based on the reference image. The camera performs a slow, smooth vertical crane shot upward (pedestal movement) along the product, revealing it flawlessly from bottom to top with zero perspective distortion. Keep the product perfectly unchanged: maintain strict structural integrity, preserving the exact design, materials, texture, text, logo placement, shape, and proportions. Clean white studio background, soft diffused lighting, subtle shadows, premium commercial aesthetics. Elegant, polished, high-end look. No deformation, no extra objects, no camera shake, no distortion, no changes to the product\'s color or details.' },
+  light_play: { label: 'Игра света', prompt: 'Create a cinematic product video based on the reference image. Stationary camera with minimal to no movement, focusing entirely on soft shifting studio light. Gentle cinematic reflections, specular highlights, and elegant gleams moving across the product\'s surface. Keep the product perfectly unchanged: maintain strict structural integrity, preserving the exact design, materials, texture, text, logo placement, shape, and proportions. Clean white studio background, soft diffused lighting, subtle shadows, premium commercial aesthetics. Elegant, polished, high-end look. No deformation, no extra objects, no camera shake, no distortion, no changes to the product\'s color or details.' },
+  back_view: { label: 'Вид сзади', prompt: 'Create a cinematic product video based on the reference image showing the back of the product. Smooth, extremely gentle camera movement maintaining a steady hero shot, keeping the full back design of the product perfectly in frame with no deep push-in. Keep the product perfectly unchanged: maintain strict structural integrity, preserving the exact design, materials, texture, text, logo placement, shape, and proportions. Clean white studio background, soft diffused lighting, subtle shadows, premium commercial aesthetics. Elegant, polished, high-end look. No deformation, no extra objects, no camera shake, no distortion, no changes to the product\'s color or details.' },
+};
+
+// --- Load prompts from JSON (with fallback to hardcoded values above) ---
+let videoPrompts;
+try {
+  const jsonPath = join(__dirname, '..', 'prompts.video.json');
+  videoPrompts = JSON.parse(readFileSync(jsonPath, 'utf-8'));
+  console.log('[prompts] prompts.video.json loaded successfully');
+} catch (err) {
+  console.error(`[prompts] Ошибка чтения prompts.video.json: ${err.message}`);
+  console.error('[prompts] Используются встроенные fallback-промпты');
+  videoPrompts = null;
+}
+
+function presetsObjToArray(obj) {
+  return Object.entries(obj)
+    .filter(([k]) => !k.startsWith('_'))
+    .map(([key, val]) => ({ key, label: val.label, prompt: val.prompt }));
+}
+
+const negatives = videoPrompts?.negatives ?? FALLBACK_NEGATIVES;
+const wanPresetsObj = videoPrompts?.motion_presets_wan ?? FALLBACK_MOTION_WAN;
+const cosmosPresetsObj = videoPrompts?.motion_presets_cosmos ?? FALLBACK_MOTION_COSMOS;
+
+export const MOTION_PRESETS = presetsObjToArray(wanPresetsObj);
+export const COSMOS_PRESETS = presetsObjToArray(cosmosPresetsObj);
+export const COSMOS_NEGATIVE_PROMPT = negatives.cosmos;
 
 export const VIDEO_MODELS = {
   wan: {
@@ -26,28 +82,6 @@ export const VIDEO_MODELS = {
     credits: CREDITS_VEO,
   },
 };
-
-export const MOTION_PRESETS = [
-  { key: 'push_in', label: 'Мягкий наезд', prompt: 'slow cinematic camera push-in towards the product, subtle, premium commercial product video, smooth motion' },
-  { key: 'pan', label: 'Панорама', prompt: 'smooth horizontal camera pan along the product, steady lateral tracking movement, no rotation, no orbit, premium commercial product video' },
-  { key: 'orbit', label: 'Облёт', prompt: 'camera slowly orbits around the product, premium commercial product video, smooth controlled motion' },
-  { key: 'pull_back', label: 'Отъезд', prompt: 'slow cinematic camera pull-back revealing the product, premium commercial look, smooth motion' },
-  { key: 'tilt', label: 'Подъём', prompt: 'slow vertical camera tilt up the product, premium commercial product video, smooth motion' },
-  { key: 'light_play', label: 'Игра света', prompt: 'minimal camera movement, focus on shifting light and reflections on the product, premium commercial look' },
-  { key: 'back_view', label: 'Вид сзади', prompt: 'smooth gentle camera movement showing the full back of the product, steady framing keeping the whole item in view, premium commercial product video, smooth motion' },
-];
-
-export const COSMOS_NEGATIVE_PROMPT = 'text morphing, logo distortion, mutated text, scrambled letters, melting geometry, warping shapes, morphing objects, macroblocking artifacts, chromatic aberration, high-frequency noise, rolling shutter distortion, motion blur, shaky footage, low resolution, grainy texture, pixelation, poor lighting, underexposed, overexposed, washed out colors, color banding, choppy or jerky movement, low frame rate, unnatural transitions, jump cuts, flickering, moiré patterns, edge halos, temporal aliasing, deformation, distortion, changes to product color or details, extra objects, fake or unconvincing visuals, overall poor quality';
-
-export const COSMOS_PRESETS = [
-  { key: 'push_in', label: 'Мягкий наезд', prompt: 'Create a cinematic product video based on the reference image. The camera performs a slow, smooth dolly push-in toward the product, gently emphasizing its front details. Keep the product perfectly unchanged: maintain strict structural integrity, preserving the exact design, materials, texture, text, logo placement, shape, and proportions. Clean white studio background, soft diffused lighting, subtle shadows, premium commercial aesthetics. Elegant, polished, high-end advertising look. No deformation, no extra objects, no camera shake, no distortion, no changes to the product\'s color or details.' },
-  { key: 'pan', label: 'Панорама', prompt: 'Create a cinematic product video based on the reference image. The camera performs a smooth horizontal lateral truck shot along the product, steady side-to-side tracking with no rotation and no orbit. Keep the product perfectly unchanged: maintain strict structural integrity, preserving the exact design, materials, texture, text, logo placement, shape, and proportions. Clean white studio background, soft diffused lighting, subtle shadows, premium commercial aesthetics. Elegant, polished, high-end look. No deformation, no extra objects, no camera shake, no distortion, no changes to the product\'s color or details.' },
-  { key: 'orbit', label: 'Облёт', prompt: 'Create a cinematic product video based on the reference image. The camera performs a slow, smooth, elegant arc shot and partial orbit around the product, starting from a front three-quarter angle and gradually revealing the side and dimensional profile. Keep the product perfectly unchanged: maintain strict structural integrity, preserving the exact design, materials, texture, text, logo placement, shape, and proportions. Clean white studio background, soft diffused lighting, subtle shadows, premium commercial product photography aesthetics. High-end luxury advertising look. No deformation, no extra objects, no camera shake, no distortion, no changes to the product\'s color or details.' },
-  { key: 'pull_back', label: 'Отъезд', prompt: 'Create a cinematic product video based on the reference image. The camera performs a slow, smooth dolly pull-back, gradually revealing the full product and its clean presentation in the frame. Keep the product perfectly unchanged: maintain strict structural integrity, preserving the exact design, materials, texture, text, logo placement, shape, and proportions. Clean white studio background, soft diffused lighting, subtle shadows, premium commercial aesthetics. Elegant, polished, high-end look. No deformation, no extra objects, no camera shake, no distortion, no changes to the product\'s color or details.' },
-  { key: 'tilt', label: 'Подъём', prompt: 'Create a cinematic product video based on the reference image. The camera performs a slow, smooth vertical crane shot upward (pedestal movement) along the product, revealing it flawlessly from bottom to top with zero perspective distortion. Keep the product perfectly unchanged: maintain strict structural integrity, preserving the exact design, materials, texture, text, logo placement, shape, and proportions. Clean white studio background, soft diffused lighting, subtle shadows, premium commercial aesthetics. Elegant, polished, high-end look. No deformation, no extra objects, no camera shake, no distortion, no changes to the product\'s color or details.' },
-  { key: 'light_play', label: 'Игра света', prompt: 'Create a cinematic product video based on the reference image. Stationary camera with minimal to no movement, focusing entirely on soft shifting studio light. Gentle cinematic reflections, specular highlights, and elegant gleams moving across the product\'s surface. Keep the product perfectly unchanged: maintain strict structural integrity, preserving the exact design, materials, texture, text, logo placement, shape, and proportions. Clean white studio background, soft diffused lighting, subtle shadows, premium commercial aesthetics. Elegant, polished, high-end look. No deformation, no extra objects, no camera shake, no distortion, no changes to the product\'s color or details.' },
-  { key: 'back_view', label: 'Вид сзади', prompt: 'Create a cinematic product video based on the reference image showing the back of the product. Smooth, extremely gentle camera movement maintaining a steady hero shot, keeping the full back design of the product perfectly in frame with no deep push-in. Keep the product perfectly unchanged: maintain strict structural integrity, preserving the exact design, materials, texture, text, logo placement, shape, and proportions. Clean white studio background, soft diffused lighting, subtle shadows, premium commercial aesthetics. Elegant, polished, high-end look. No deformation, no extra objects, no camera shake, no distortion, no changes to the product\'s color or details.' },
-];
 
 export const POLL_TIMEOUT = 8 * 60 * 1000; // 8 min
 const POLL_INTERVAL = 5000;
@@ -82,7 +116,7 @@ export async function submitToFal({ imageUrl, modelKey, motionPrompt, seed, dura
       image_url: imageUrl,
       prompt: promptText,
       duration: durationSec || '5',
-      negative_prompt: 'blur, distort, low quality, warped text, distorted lettering, deformed logo',
+      negative_prompt: negatives.wan,
       cfg_scale: 0.5,
     };
   } else if (modelKey === 'cosmos') {
@@ -106,7 +140,7 @@ export async function submitToFal({ imageUrl, modelKey, motionPrompt, seed, dura
       duration: '8s',
       generate_audio: false,
       aspect_ratio: '9:16',
-      negative_prompt: 'low quality, distortion, warping, blurry',
+      negative_prompt: negatives.veo,
     };
   }
 
