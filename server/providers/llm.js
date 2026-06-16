@@ -1,7 +1,10 @@
 import { randomUUID } from 'crypto';
 import { readFileSync, existsSync } from 'fs';
-import { resolve } from 'path';
+import { resolve, dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import { Agent, fetch as undiciFetch } from 'undici';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const OAUTH_URL = 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth';
 const CHAT_URL = 'https://gigachat.devices.sberbank.ru/api/v1/chat/completions';
@@ -121,7 +124,8 @@ async function chatCompletion(messages, { temperature = 0.9, maxTokens = 2048 } 
 
 // ── Sprint B: build image prompt from Russian product description ──
 
-const IMAGE_PROMPT_SYSTEM = `You are a professional product photographer and AI image prompt engineer.
+// --- Fallback prompts (used only if prompts.image.json fails to load) ---
+const FALLBACK_IMAGE_PROMPT_SYSTEM = `You are a professional product photographer and AI image prompt engineer.
 The user describes a product in Russian. Your job:
 1. Create a DETAILED prompt IN ENGLISH for an AI image generator (Nano Banana / Flux).
 2. The prompt must describe: the product itself, background/surface, camera angle, lighting, style.
@@ -129,9 +133,24 @@ The user describes a product in Russian. Your job:
 4. Keep text/logos on packaging readable — mention "sharp readable text on label" in the prompt.
 5. Output ONLY the English prompt, no explanations, no markdown, no quotes.`;
 
-const IMAGE_PROMPT_SYSTEM_STRICT = `You MUST output ONLY an English prompt for an AI image generator. No Russian, no Cyrillic characters, no explanations, no markdown, no quotes. English only. Output the prompt and nothing else.
+const FALLBACK_IMAGE_PROMPT_SYSTEM_STRICT = `You MUST output ONLY an English prompt for an AI image generator. No Russian, no Cyrillic characters, no explanations, no markdown, no quotes. English only. Output the prompt and nothing else.
 
 The user describes a product. Create a detailed image generation prompt describing: the product, background, camera angle, lighting, premium commercial product photography style. Mention "sharp readable text on label".`;
+
+// --- Load prompts from JSON (with fallback to hardcoded values above) ---
+let imagePrompts;
+try {
+  const jsonPath = join(__dirname, '..', 'prompts.image.json');
+  imagePrompts = JSON.parse(readFileSync(jsonPath, 'utf-8'));
+  console.log('[prompts] prompts.image.json loaded successfully');
+} catch (err) {
+  console.error(`[prompts] Ошибка чтения prompts.image.json: ${err.message}`);
+  console.error('[prompts] Используются встроенные fallback-промпты');
+  imagePrompts = null;
+}
+
+const IMAGE_PROMPT_SYSTEM = imagePrompts?.image_prompt_system ?? FALLBACK_IMAGE_PROMPT_SYSTEM;
+const IMAGE_PROMPT_SYSTEM_STRICT = imagePrompts?.image_prompt_system_strict ?? FALLBACK_IMAGE_PROMPT_SYSTEM_STRICT;
 
 const CYRILLIC_RE = /[а-яёА-ЯЁ]/;
 
