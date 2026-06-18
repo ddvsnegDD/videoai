@@ -225,12 +225,12 @@ export async function yandexCallback(req, res) {
     }
 
     // ── LOGIN FLOW ──
-    const { user } = await findOrCreateSSOUser('yandex', String(profile.id), email, name, avatarUrl, hasConsent);
-    const token = issueToken(user);
+    const result = await findOrCreateSSOUser('yandex', String(profile.id), email, name, avatarUrl, hasConsent);
+    const token = issueToken(result.user);
 
-    console.log(`[sso:yandex] Login: user=${user.id} email=${user.email} provider_id=${profile.id}`);
+    console.log(`[sso:yandex] Login: user=${result.user.id} email=${result.user.email} provider_id=${profile.id}`);
     res.cookie('token', token, TOKEN_COOKIE_OPTS);
-    res.redirect('/dashboard');
+    res.redirect(result.isNew ? '/dashboard?registered=1' : '/dashboard');
   } catch (err) {
     console.error('[sso:yandex] callback error:', err);
     const linkUserId = req.cookies?.sso_link_uid;
@@ -351,12 +351,12 @@ export async function vkCallback(req, res) {
     }
 
     // ── LOGIN FLOW ──
-    const { user } = await findOrCreateSSOUser('vk', userId, email, name, avatarUrl, hasConsent);
-    const token = issueToken(user);
+    const result = await findOrCreateSSOUser('vk', userId, email, name, avatarUrl, hasConsent);
+    const token = issueToken(result.user);
 
-    console.log(`[sso:vk] Login: user=${user.id} email=${user.email} provider_id=${userId}`);
+    console.log(`[sso:vk] Login: user=${result.user.id} email=${result.user.email} provider_id=${userId}`);
     res.cookie('token', token, TOKEN_COOKIE_OPTS);
-    res.redirect('/dashboard');
+    res.redirect(result.isNew ? '/dashboard?registered=1' : '/dashboard');
   } catch (err) {
     console.error('[sso:vk] callback error:', err);
     const linkUserId = req.cookies?.sso_link_uid;

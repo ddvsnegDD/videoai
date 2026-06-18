@@ -100,9 +100,11 @@ export async function verifyCode(email, code) {
   await pool.query(`UPDATE auth_codes SET used = TRUE WHERE id = $1`, [row.id]);
 
   // Find or create user
+  let isNew = false;
   let user = await pool.query(`SELECT * FROM users WHERE email = $1`, [normalized]);
 
   if (user.rows.length === 0) {
+    isNew = true;
     user = await pool.query(
       `INSERT INTO users (email, credits, free_wan, free_veo, free_image, consent_accepted_at, consent_version) VALUES ($1, $2, $3, $4, $5, NOW(), $6) RETURNING *`,
       [normalized, WELCOME_CREDITS_EMAIL, FREE_WAN_EMAIL, FREE_VEO_EMAIL, FREE_IMAGE_EMAIL, CONSENT_VERSION]
@@ -123,7 +125,7 @@ export async function verifyCode(email, code) {
     { expiresIn: JWT_EXPIRY }
   );
 
-  return { ok: true, token, user: sanitizeUser(userData) };
+  return { ok: true, token, user: sanitizeUser(userData), isNew };
 }
 
 export function requireAuth(req, res, next) {

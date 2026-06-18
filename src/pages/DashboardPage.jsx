@@ -6,6 +6,7 @@ import { Video, Plus, Download, Trash2, Sparkles, Clock, Film, Loader } from 'lu
 import { C } from '../lib/theme';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { trackRegistration } from '../lib/analytics.js';
 
 const glassPanel = {
   background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(20px)',
@@ -118,6 +119,14 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleteError, setDeleteError] = useState('');
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('registered') === '1') {
+      trackRegistration();
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     api.get('/projects')

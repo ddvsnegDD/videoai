@@ -108,7 +108,7 @@ app.post('/api/auth/verify', async (req, res) => {
       httpOnly: true, secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax', maxAge: 30 * 24 * 60 * 60 * 1000, path: '/',
     });
-    res.json({ ok: true, user: result.user });
+    res.json({ ok: true, user: result.user, isNew: result.isNew });
   } catch (err) {
     console.error('verify error:', err);
     res.status(500).json({ error: 'server_error' });

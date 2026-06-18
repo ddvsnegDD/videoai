@@ -19,6 +19,7 @@ import OfertaPage from './pages/OfertaPage';
 import PrivacyPage from './pages/PrivacyPage';
 import ConsentPage from './pages/ConsentPage';
 import AccountPage from './pages/AccountPage';
+import YandexMetrika from './components/YandexMetrika';
 
 /* ── ErrorBoundary (ловит рендер-ошибки, не даёт белый экран) ── */
 class ErrorBoundary extends Component {
@@ -69,6 +70,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
+        <YandexMetrika />
         <Routes>
           <Route element={<Layout />}>
             {/* Гостевой слой */}

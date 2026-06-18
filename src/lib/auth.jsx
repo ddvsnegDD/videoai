@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { api } from './api.js';
+import { trackRegistration } from './analytics.js';
 
 const AuthContext = createContext(null);
 
@@ -23,6 +24,7 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (email, code) => {
     const data = await api.post('/auth/verify', { email, code });
     setUser(data.user);
+    if (data.isNew) trackRegistration();
     return data;
   }, []);
 
