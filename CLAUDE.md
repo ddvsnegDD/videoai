@@ -1,7 +1,7 @@
 # CLAUDE.md — VideoAI
 
 > Системный промпт для Claude Code. Лежит в корне репозитория.
-> Обновлён 31.05.2026 после пивота (Спринт A).
+> Обновлён 16.06.2026. Добавлены: Cosmos (3-я модель), ЮKassa, SSO Яндекс/VK, водяные знаки, промпты в JSON.
 
 ---
 
@@ -25,7 +25,7 @@
 
 ```yaml
 project_name: "VideoAI"
-project_description: "AI Creative Engine для B2B: короткие рекламные видеокреативы для селлеров. Фото товара → оживление в клип 5-8 сек (image-to-video, fal.ai Wan/Veo) → готовый креатив (hook / product shot)."
+project_description: "AI Creative Engine для B2B: короткие рекламные видеокреативы для селлеров. Фото товара → оживление в клип 5-8 сек (image-to-video, fal.ai Kling/Cosmos/Veo) → готовый креатив (hook / product shot)."
 audience: "b2b"
 locale: "ru"
 
@@ -39,9 +39,9 @@ fonts_ui: "Inter"
 
 # Фичи
 auth: true
-auth_method: "email_otp"
+auth_method: "email_otp + sso"   # email OTP + OAuth Яндекс ID / VK ID
 payments: true
-payment_provider: "yoomoney_wallet"   # ЮMoney-кошелёк (Quickpay + HTTP-уведомления). Миграция на ЮKassa — когда «пойдёт»
+payment_provider: "yookassa"   # ЮKassa v3 API (api.yookassa.ru/v3). Legacy YooMoney-webhook оставлен для переходного периода
 crm: false
 admin_panel: true
 upload: true                   # загрузка фото товара (multer → S3)
@@ -50,9 +50,9 @@ upload: true                   # загрузка фото товара (multer 
 github_repo: "https://github.com/ddvsnegDD/videoai"
 github_remote: "origin"
 domain: "ddvideoai.ru"         # Активен, HTTPS, DNS через Cloudflare
-hosting: "railway"             # миграция на Selectel/Yandex на B2B-этапе
-db: "Postgres-DDvideoai"       # Отдельная база Railway (НЕ общая с другими проектами!)
-email_provider: "brevo"        # Домен ddvideoai.ru authenticated (SPF/DKIM/DMARC)
+hosting: "reg.cloud VPS (РФ)"  # Free Tier, Москва, Ubuntu 26.04, IP 194.226.20.185
+db: "PostgreSQL 18 (локальный)" # На том же VPS, данные в РФ (152-ФЗ)
+email_provider: "smtp_mailru"   # SMTP Mail.ru (smtp.mail.ru:587)
 email_from: "noreply@ddvideoai.ru"
 mail_hosting: "VK WorkSpace (Mail.ru)"
 ```
@@ -76,7 +76,12 @@ mail_hosting: "VK WorkSpace (Mail.ru)"
   - Хвосты: пропорции — генерация/Kling дают 3:4, Veo форсит 9:16 (не обрезает товар, достраивает фон — см. ниже); SSL-сертификаты GigaChat (`rejectUnauthorized:false` — долг до боевого запуска); лендинг.
 - **Veo на проде — ПРОВЕРЕН (02.06.2026).** Премиум-модель наконец запущена вживую: 8 сек, 720×1280 (9:16), без аудио, ~$1.20/ролик. Текст идеально цел, выраженный кинематографичный наезд, качество — лучшее за проект, апселл оправдан. Форс `aspect_ratio:'9:16'` на менее вертикальном фото **не обрезает товар, а достраивает окружение** (фон/стол) — старый страх про обрезку снят.
 - **Удаление проектов + ErrorBoundary (02.06.2026).** `DELETE /api/projects/:id` (проверка владельца, 409 при активной генерации, S3-cleanup best-effort, FK CASCADE на `generation_jobs`, `payments` не трогает). `<ErrorBoundary>` в `App.jsx` — защита от белого экрана при краше рендера.
-- **Спринт 6 — ЗАВЕРШЁН (реальный платёж подтверждён 02.06.2026).** Биллинг через **ЮMoney-кошелёк** (НЕ ЮKassa): Quickpay-ссылка с меткой `label` → HTTP-уведомление → проверка подписи `sign` (HMAC-SHA256, НЕ устаревший `sha1_hash`) → идемпотентное начисление по `operation_id`. `server/payments.js`, таблица `payments`, `BillingPage`. Пакеты роликов (эконом 199/890/2390/3990, премиум 590/2490) начисляются кредитами. Живой тест: 199 ₽ → кошелёк получил 193,03 ₽ (комиссия ЮMoney ~3%), кредиты начислены. **Поле суммы в webhook = `amount`** (после комиссии); допуск сверки 10% перекрывает. Хвосты: email-уведомление об оплате, polling баланса при `?paid=1`. (`<ErrorBoundary>` уже добавлен — см. ниже.)
+- **Спринт 6 — ЗАВЕРШЁН (реальный платёж подтверждён 02.06.2026).** Биллинг через **ЮMoney-кошелёк** (НЕ ЮKassa): Quickpay-ссылка с меткой `label` → HTTP-уведомление → проверка подписи `sign` (HMAC-SHA256, НЕ устаревший `sha1_hash`) → идемпотентное начисление по `operation_id`. `server/payments.js`, таблица `payments`, `BillingPage`. **Тарифы обновлены:** 3 пакета с универсальными кредитами — Hook Pack (599 ₽ / 120 кр.), Product Shots (1 099 ₽ / 240 кр.), Seller (1 599 ₽ / 360 кр.). Источник истины — `src/data/tariffs.js`. Живой тест: 199 ₽ → кошелёк получил 193,03 ₽ (комиссия ЮMoney ~3%), кредиты начислены. **Поле суммы в webhook = `amount`** (после комиссии); допуск сверки 10% перекрывает.
+- **Спринт C — ЗАВЕРШЁН И ЗАДЕПЛОЕН (03-05.06.2026).** Редизайн фронтенда через Claude Design: новый B2B-лендинг (7 секций, адаптив, демо-видео), обновлённые Layout/Dashboard/Editor в glass-дизайне, фронт-гейт админки (`adminConfig.js` + `AdminRoute`). Мерж с бэкенд-логикой: EditorPage и DashboardPage работают через реальные API (upload, jobs, polling, кредиты, пробники). Тарифы сведены к 3 пакетам (единый источник `tariffs.js`). ErrorBoundary восстановлен, двойной BrowserRouter исправлен. Осиротевшие файлы почищены.
+- **Миграция на reg.cloud VPS (РФ) — ЗАВЕРШЕНА (05.06.2026).** Переезд с Railway (США) → reg.cloud VPS (Москва) для локализации ПДн по 152-ФЗ. PostgreSQL 18 локально, Nginx + Let's Encrypt, PM2. DNS перенаправлен. Railway выведен из эксплуатации.
+- **Спринт 7 — АКТУАЛЕН (ТЗ готовы, не исполнены).** Разбит на два блока:
+  - **Блок 1:** Админка — доработка AdminPage (ТЗ `SPRINT_7_BLOCK1_ADMIN_PROMPT.md`).
+  - **Блок 2:** Юр-страницы (`/oferta`, `/privacy`, `/consent`) + правки текстов BillingPage (убрать ложное «выставление чеков»). ТЗ `SPRINT_7_BLOCK2_SITE_PROMPT.md` + документы-болванки готовы.
 
 > При работе над новым спринтом не ломай и не переписывай код завершённых спринтов без явного указания.
 
@@ -162,10 +167,14 @@ videoai/
 ├── package.json                # type: "module"
 ├── server.js                   # Express: API + статика
 ├── vite.config.js
+├── ecosystem.config.cjs        # PM2 конфиг (ОБЯЗАТЕЛЬНО .cjs, не .js — ESM проект)
+├── DEPLOY.md                   # Инструкция деплоя на VPS
+├── .env.example                # Шаблон переменных окружения (23 ключа)
+├── nginx/videoai.conf          # Конфиг Nginx reverse-proxy
 ├── CLAUDE.md                   # Этот файл
-├── PROJECT.md                  # Описание продукта (требует обновления под пивот)
-├── ROADMAP.md                  # План спринтов (требует обновления под пивот)
-├── AI_PROVIDERS.md             # Контракты AI-провайдеров (требует обновления: fal)
+├── PROJECT.md                  # Описание продукта
+├── ROADMAP.md                  # План спринтов
+├── AI_PROVIDERS.md             # Контракты AI-провайдеров
 ├── VIDEOAI_STRATEGY_V2.md      # Стратегия (актуальна)
 ├── SPRINT_A_REPORT.md          # Отчёт пивота (актуален)
 │
@@ -190,26 +199,25 @@ videoai/
     ├── App.jsx
     ├── styles/global.css
     ├── data/
-    │   └── tariffs.js          # Пакеты креативов (черновик, см. стратегию)
+    │   └── tariffs.js          # ★ Единый источник тарифов: 3 пакета (hook/product_shots/seller)
     ├── components/
-    │   ├── Layout.jsx          # хедер + бейдж кредитов + free-попытки
+    │   ├── Layout.jsx          # Glass-шапка кабинета (Outlet), пункт «Админ» по isAdmin(), скрыта на гостевых
     │   ├── Btn.jsx
-    │   ├── ProjectCard.jsx     # thumbnail из brief.image_url, бейдж Готово/Черновик
-    │   ├── GenerationProgress.jsx  # «Оживляю товар…», прогресс-бар с polling
     │   └── (legacy: SocialConnector.jsx, PublishScheduler.jsx — вне скоупа)
     ├── lib/
     │   ├── auth.jsx            # AuthProvider
+    │   ├── adminConfig.js      # ADMIN_EMAILS + isAdmin() — фронт-гейт админки
     │   ├── theme.js            # Палитра C
-    │   ├── hooks.js            # useReveal, useDebounce, useJobPolling
+    │   ├── hooks.js            # useReveal, useJobPolling
     │   └── api.js              # fetch-обёртка
     └── pages/
-        ├── HomePage.jsx        # ⚠ Лендинг: тексты про SpeechKit/Kandinsky устарели, нужен редизайн
+        ├── HomePage.jsx        # ★ B2B-лендинг (7 секций: Hero+виджет, метрики, шаги, экономика, тарифы из PACKAGES, FAQ, CTA)
         ├── LoginPage.jsx       # Email OTP
-        ├── DashboardPage.jsx   # Список проектов («Создать креатив»)
-        ├── EditorPage.jsx      # ★ 4 шага: фото → движение → модель → результат
-        ├── ProjectPage.jsx     # видео-плеер + скачать + создать ещё
-        ├── BillingPage.jsx     # Тарифы и оплата
-        ├── AdminPage.jsx       # Админка (⚠ мёртвые ветки storyboard/regenerate_scene)
+        ├── DashboardPage.jsx   # ★ Реальные проекты из API, hover-play видео, glass-дизайн, удаление с подтверждением
+        ├── EditorPage.jsx      # ★ 3-колоночный UI: фото/текст → движение → модель + монитор; реальные API (upload, jobs, polling, кредиты)
+        ├── ProjectPage.jsx     # видео-плеер + скачать (не подключён к роутинг, legacy)
+        ├── BillingPage.jsx     # ★ 3 пакета из tariffs.js + реальная оплата ЮMoney + история
+        ├── AdminPage.jsx       # Админка (⚠ мёртвые ветки storyboard/regenerate_scene — Sprint 7 Блок 1)
         └── (legacy: PublishPage.jsx — вне скоупа)
 ```
 
@@ -300,6 +308,7 @@ import pool, { initDB } from './server/db.js';
 const app = express();
 const DIST = resolve('dist');
 
+app.set('trust proxy', 1);       // за Nginx reverse-proxy
 app.use(express.json());
 app.use(cookieParser());
 
@@ -387,7 +396,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_job ON generation_jobs (idempotenc
 CREATE TABLE payments (             -- ЮMoney-кошелёк
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id),
-  package_id TEXT,                   -- из tariffs.js (economy_1 ... premium_5)
+  package_id TEXT,                   -- из tariffs.js (hook / product_shots / seller)
   label TEXT,                        -- userId:packageId:nonce (метка платежа)
   expected_amount NUMERIC,           -- цена пакета
   paid_amount NUMERIC,               -- поле amount из webhook (после комиссии ЮMoney ~3%)
@@ -417,7 +426,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS uniq_operation_id ON payments (operation_id)
 - Приветственные кредиты: `WELCOME_CREDITS` (дефолт 50).
 - При сбое генерации — кредиты или free-попытка возвращаются.
 
-Тарифы (черновик, финал после живого теста — см. `VIDEOAI_STRATEGY_V2.md`): продаём **пакеты результата** (готовые креативы), не «секунды». Двухрежимная экономика: Wan ~70 ₽/ролик себестоимость (290 ₽ за 1, до 4500 ₽ за 30), Veo ~160 ₽/ролик (апселл 590–990 ₽).
+**Тарифы (актуальная сетка — 3 пакета с универсальными кредитами):**
+- **Hook Pack** — 599 ₽ / 120 кредитов (≈3 эконом-ролика)
+- **Product Shots** — 1 099 ₽ / 240 кредитов (≈6 эконом / 2 премиум)
+- **Seller** — 1 599 ₽ / 360 кредитов (≈9 эконом / 4 премиум), popular
+
+Источник истины — `src/data/tariffs.js`. Бэкенд читает этот файл напрямую (`getPackageById`), фронту не доверяет.
 
 ---
 
@@ -464,47 +478,70 @@ export default defineConfig({
 
 ---
 
-## Деплой на Railway
+## Инфраструктура — reg.cloud VPS (РФ)
 
-### Переменные окружения
+### Сервер
+- **reg.cloud Free Tier C1-M1-D10** — 1 vCPU / 1 ГБ RAM / 10 ГБ NVMe + swap 2 ГБ.
+- **Ubuntu 26.04 LTS**, IP `194.226.20.185`, Москва.
+- **Node 22 LTS**, **PostgreSQL 18 локально** (не managed — данные в РФ, 152-ФЗ).
+- **Nginx** как reverse-proxy, **HTTPS через Let's Encrypt** (certbot, автопродление).
+- Процесс-менеджер **PM2**: `pm2 start ecosystem.config.cjs` — 1 экземпляр, `exec_mode: 'fork'`, `node_args: '--env-file=.env'`.
+- Приложение работает под пользователем `deploy` в `/home/deploy/app`.
+- DNS — **Cloudflare**, A-записи `ddvideoai.ru` + `www` → `194.226.20.185`, **режим DNS only** (серое облако; SSL терминируется на сервере).
+- **Yandex Object Storage** (бакет `videoai-media`) — без изменений, файлы в РФ.
+
+### Правки кода под VPS
+- `server.js`: добавлен `app.set('trust proxy', 1)` — приложение за Nginx.
+- `server/db.js`: SSL стал условным — отключается для `localhost`/`127.0.0.1` (локальный Postgres SSL не требует).
+- Добавлены: `.env.example` (23 ключа), `nginx/videoai.conf`, `ecosystem.config.cjs`, `DEPLOY.md`.
+- **Важно:** `ecosystem.config.cjs` (НЕ `.js`) — проект ESM (`"type": "module"`), `.js` с `module.exports` падает.
+
+### Переменные окружения (`.env` на сервере)
 ```
-DATABASE_URL              # Railway PostgreSQL (авто)
-JWT_SECRET                # подпись JWT
+DATABASE_URL              # postgres://... (локальный Postgres)
+JWT_SECRET                # подпись JWT (перевыпущен при миграции)
 BREVO_API_KEY
 EMAIL_FROM
 EMAIL_FROM_NAME
 ADMIN_EMAIL               # промоут в admin
 WELCOME_CREDITS           # приветственные кредиты (дефолт 50)
 CREDITS_IMAGE             # стоимость картинки Nano Banana (дефолт 13)
-GIGACHAT_AUTH_KEY         # OAuth-ключ GigaChat (активен в Спринте B — buildImagePrompt)
+GIGACHAT_AUTH_KEY         # OAuth-ключ GigaChat (активен — buildImagePrompt)
 GIGACHAT_SCOPE            # scope GigaChat (дефолт GIGACHAT_API_PERS)
 
 # fal.ai
-FAL_KEY                   # единый ключ (Wan + Veo + Flux/Nano Banana)
-CREDITS_WAN               # стоимость Wan (дефолт 40)
+FAL_KEY                   # единый ключ (Kling + Veo + Nano Banana)
+CREDITS_WAN               # стоимость Kling-эконом (дефолт 40, имя от Wan)
 CREDITS_VEO               # стоимость Veo (дефолт 90)
 
 # S3 (Yandex Object Storage)
 S3_ENDPOINT=https://storage.yandexcloud.net
 S3_BUCKET=videoai-media
-S3_ACCESS_KEY
-S3_SECRET_KEY
+S3_ACCESS_KEY             # перевыпущен при миграции
+S3_SECRET_KEY             # перевыпущен при миграции
 
 # ЮMoney-кошелёк (платежи)
 YOOMONEY_WALLET                # номер кошелька-получателя
-YOOMONEY_NOTIFICATION_SECRET   # секрет для проверки подписи sign
-APP_URL                        # базовый URL для successURL (дефолт https://ddvideoai.ru)
-
-# Легаси (код больше не читает — можно удалить позже):
-# GIGACHAT_AUTH_KEY, GIGACHAT_SCOPE — понадобятся снова в Спринте B (GigaChat)
-# YANDEX_SPEECHKIT_KEY, YANDEX_API_KEY, YANDEX_FOLDER_ID — старый пайплайн
-# VK_APP_ID, VK_APP_SECRET, TELEGRAM_BOT_TOKEN — соцсети, вне скоупа
-# CREDITS_PER_REGEN, CREDITS_PER_VIDEO — старая кредитная модель
+YOOMONEY_NOTIFICATION_SECRET   # секрет для проверки подписи sign (отложен до ЮKassa)
+APP_URL=https://ddvideoai.ru
 
 NODE_ENV=production
 ```
 
-> GigaChat (Спринт B) использует самоподписанный сертификат НУЦ Минцифры — на Railway возможна ошибка SSL, подгружать цепочку (russian_trusted_root_ca) в https.Agent.
+> Секреты `JWT_SECRET` и ключи S3 перевыпущены при миграции (старые удалены). `YOOMONEY_NOTIFICATION_SECRET` — отложен до перехода на ЮKassa.
+> GigaChat использует сертификат НУЦ Минцифры — сейчас `rejectUnauthorized:false` (долг безопасности).
+
+---
+
+## Юридический статус / 152-ФЗ
+
+- Владелец зарегистрирован как **самозанятый (плательщик НПД)** — правовая основа для приёма платежей.
+- Подготовлены юр-документы (оферта, политика конфиденциальности, согласие на ПДн) — болванки с плейсхолдерами, к публикации страницами `/oferta`, `/privacy`, `/consent` (Sprint 7 Блок 2).
+- **152-ФЗ: локализация закрыта** переездом БД в РФ (reg.cloud, Москва).
+- **Трансграничная передача НЕ требуется:** в оферте/политике закреплён запрет загружать изображения людей → данные, уходящие на fal.ai, персональных данных не содержат.
+- **Уведомление в Роскомнадзор — в плане** (УКЭП через Госключ есть).
+- Контакт: `ddv1121@yandex.ru`.
+- **Переход на ЮKassa** (авто-чеки НПД) — после публикации оферты и прохождения модерации.
 
 ---
 
