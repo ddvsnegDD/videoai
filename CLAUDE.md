@@ -76,7 +76,7 @@ mail_hosting: "VK WorkSpace (Mail.ru)"
   - Хвосты: пропорции — генерация/Kling дают 3:4, Veo форсит 9:16 (не обрезает товар, достраивает фон — см. ниже); SSL-сертификаты GigaChat (`rejectUnauthorized:false` — долг до боевого запуска); лендинг.
 - **Veo на проде — ПРОВЕРЕН (02.06.2026).** Премиум-модель наконец запущена вживую: 8 сек, 720×1280 (9:16), без аудио, ~$1.20/ролик. Текст идеально цел, выраженный кинематографичный наезд, качество — лучшее за проект, апселл оправдан. Форс `aspect_ratio:'9:16'` на менее вертикальном фото **не обрезает товар, а достраивает окружение** (фон/стол) — старый страх про обрезку снят.
 - **Удаление проектов + ErrorBoundary (02.06.2026).** `DELETE /api/projects/:id` (проверка владельца, 409 при активной генерации, S3-cleanup best-effort, FK CASCADE на `generation_jobs`, `payments` не трогает). `<ErrorBoundary>` в `App.jsx` — защита от белого экрана при краше рендера.
-- **Спринт 6 — ЗАВЕРШЁН (реальный платёж подтверждён 02.06.2026).** Биллинг через **ЮMoney-кошелёк** (НЕ ЮKassa): Quickpay-ссылка с меткой `label` → HTTP-уведомление → проверка подписи `sign` (HMAC-SHA256, НЕ устаревший `sha1_hash`) → идемпотентное начисление по `operation_id`. `server/payments.js`, таблица `payments`, `BillingPage`. **Тарифы обновлены:** 3 пакета с универсальными кредитами — Hook Pack (599 ₽ / 120 кр.), Product Shots (1 099 ₽ / 240 кр.), Seller (1 599 ₽ / 360 кр.). Источник истины — `src/data/tariffs.js`. Живой тест: 199 ₽ → кошелёк получил 193,03 ₽ (комиссия ЮMoney ~3%), кредиты начислены. **Поле суммы в webhook = `amount`** (после комиссии); допуск сверки 10% перекрывает.
+- **Спринт 6 — ЗАВЕРШЁН. Платежи мигрированы на ЮKassa (актуально).** Биллинг через **ЮKassa v3 API** (`api.yookassa.ru/v3`, Basic Auth shopId:secretKey). Поток: `POST /api/payments/create` → redirect на ЮKassa → `POST /api/payments/yookassa/webhook` → **верификация GET-запросом** `GET /payments/{id}` (телу вебхука не доверяем) → идемпотентное начисление по `yookassa_payment_id` (UNIQUE-индекс, atomic TX + ON CONFLICT DO NOTHING). Дополнительно `Idempotence-Key` header при создании платежа. Reconciler платежей каждые 120с: pending старше 5 мин проверяет, TTL 1 час → cancel. Фронт полит статус через `GET /api/payments/order/:id/status`. **Тарифы:** 3 пакета — Hook Pack (599 ₽ / 120 кр.), Product Shots (1 099 ₽ / 240 кр.), Seller (1 599 ₽ / 360 кр.), источник истины `src/data/tariffs.js`. Legacy ЮMoney-webhook (`POST /api/payments/yoomoney-webhook`) оставлен на переходный период. Чеки НПД: очередь `pending_receipts` (выставление вручную через «Мой налог» — ЮKassa-авточеки для самозанятых отключены с 01.01.2026).
 - **Спринт C — ЗАВЕРШЁН И ЗАДЕПЛОЕН (03-05.06.2026).** Редизайн фронтенда через Claude Design: новый B2B-лендинг (7 секций, адаптив, демо-видео), обновлённые Layout/Dashboard/Editor в glass-дизайне, фронт-гейт админки (`adminConfig.js` + `AdminRoute`). Мерж с бэкенд-логикой: EditorPage и DashboardPage работают через реальные API (upload, jobs, polling, кредиты, пробники). Тарифы сведены к 3 пакетам (единый источник `tariffs.js`). ErrorBoundary восстановлен, двойной BrowserRouter исправлен. Осиротевшие файлы почищены.
 - **Миграция на reg.cloud VPS (РФ) — ЗАВЕРШЕНА (05.06.2026).** Переезд с Railway (США) → reg.cloud VPS (Москва) для локализации ПДн по 152-ФЗ. PostgreSQL 18 локально, Nginx + Let's Encrypt, PM2. DNS перенаправлен. Railway выведен из эксплуатации.
 - **Спринт 7 — АКТУАЛЕН (ТЗ готовы, не исполнены).** Разбит на два блока:
@@ -393,24 +393,43 @@ CREATE TABLE generation_jobs (
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_job ON generation_jobs (idempotency_key)
   WHERE status IN ('pending','running') AND idempotency_key IS NOT NULL;
 
-CREATE TABLE payments (             -- ЮMoney-кошелёк
+CREATE TABLE payments (             -- ЮKassa (+ legacy YooMoney поля)
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id),
   package_id TEXT,                   -- из tariffs.js (hook / product_shots / seller)
-  label TEXT,                        -- userId:packageId:nonce (метка платежа)
+  label TEXT,                        -- legacy YooMoney (userId:packageId:nonce)
   expected_amount NUMERIC,           -- цена пакета
-  paid_amount NUMERIC,               -- поле amount из webhook (после комиссии ЮMoney ~3%)
-  operation_id TEXT,                 -- id операции ЮMoney (идемпотентность)
+  paid_amount NUMERIC,               -- фактически оплачено
+  operation_id TEXT,                 -- legacy YooMoney
   credits_granted INTEGER,
-  status TEXT DEFAULT 'pending',     -- pending / completed / mismatch
+  status TEXT DEFAULT 'pending',     -- pending / completed / mismatch / canceled
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  completed_at TIMESTAMPTZ,
+  -- колонки ЮKassa-миграции:
+  provider TEXT DEFAULT 'yoomoney',  -- 'yookassa' | 'yoomoney'
+  yookassa_payment_id TEXT,          -- id платежа ЮKassa (идемпотентность)
+  refunded BOOLEAN DEFAULT FALSE,
+  receipt_status TEXT DEFAULT 'not_needed',  -- статус чека НПД
+  idempotence_key TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_yookassa_payment_id ON payments (yookassa_payment_id)
+  WHERE yookassa_payment_id IS NOT NULL;   -- одно начисление на платёж ЮKassa
+
+-- Очередь чеков НПД (выставление вручную через «Мой налог»):
+CREATE TABLE pending_receipts (
+  id SERIAL PRIMARY KEY,
+  payment_id INTEGER REFERENCES payments(id),
+  user_email TEXT,
+  amount NUMERIC NOT NULL,
+  description TEXT NOT NULL,
+  status TEXT DEFAULT 'pending',
+  attempts INTEGER DEFAULT 0,
+  last_error TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   completed_at TIMESTAMPTZ
 );
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_operation_id ON payments (operation_id)
-  WHERE operation_id IS NOT NULL;    -- одно начисление на operation_id
 
 -- Легаси (соцсети, вне текущего скоупа): social_connections, publications.
--- Остались от старого пайплайна, новым флоу не используются.
 ```
 
 ---
@@ -500,9 +519,12 @@ export default defineConfig({
 ```
 DATABASE_URL              # postgres://... (локальный Postgres)
 JWT_SECRET                # подпись JWT (перевыпущен при миграции)
-BREVO_API_KEY
-EMAIL_FROM
-EMAIL_FROM_NAME
+# Email (SMTP Mail.ru)
+SMTP_HOST=smtp.mail.ru
+SMTP_PORT=587
+SMTP_USER=noreply@ddvideoai.ru
+SMTP_PASS                  # пароль приложения Mail.ru
+EMAIL_FROM=noreply@ddvideoai.ru
 ADMIN_EMAIL               # промоут в admin
 WELCOME_CREDITS           # приветственные кредиты (дефолт 50)
 CREDITS_IMAGE             # стоимость картинки Nano Banana (дефолт 13)
@@ -512,6 +534,7 @@ GIGACHAT_SCOPE            # scope GigaChat (дефолт GIGACHAT_API_PERS)
 # fal.ai
 FAL_KEY                   # единый ключ (Kling + Veo + Nano Banana)
 CREDITS_WAN               # стоимость Kling-эконом (дефолт 40, имя от Wan)
+CREDITS_COSMOS            # стоимость Cosmos 3 Super (дефолт 60)
 CREDITS_VEO               # стоимость Veo (дефолт 90)
 
 # S3 (Yandex Object Storage)
@@ -520,15 +543,26 @@ S3_BUCKET=videoai-media
 S3_ACCESS_KEY             # перевыпущен при миграции
 S3_SECRET_KEY             # перевыпущен при миграции
 
-# ЮMoney-кошелёк (платежи)
-YOOMONEY_WALLET                # номер кошелька-получателя
-YOOMONEY_NOTIFICATION_SECRET   # секрет для проверки подписи sign (отложен до ЮKassa)
+# ЮKassa (платежи)
+YOOKASSA_SHOP_ID
+YOOKASSA_SECRET_KEY
 APP_URL=https://ddvideoai.ru
+
+# SSO (OAuth)
+YANDEX_CLIENT_ID
+YANDEX_CLIENT_SECRET
+YANDEX_CALLBACK_URL
+VK_CLIENT_ID              # VK использует PKCE, secret не нужен
+VK_CALLBACK_URL
+
+# Legacy ЮMoney (webhook оставлен на переходный период)
+# YOOMONEY_WALLET
+# YOOMONEY_NOTIFICATION_SECRET
 
 NODE_ENV=production
 ```
 
-> Секреты `JWT_SECRET` и ключи S3 перевыпущены при миграции (старые удалены). `YOOMONEY_NOTIFICATION_SECRET` — отложен до перехода на ЮKassa.
+> Секреты `JWT_SECRET` и ключи S3 перевыпущены при миграции (старые удалены). Legacy YooMoney-переменные закомментированы — миграция на ЮKassa завершена.
 > GigaChat использует сертификат НУЦ Минцифры — сейчас `rejectUnauthorized:false` (долг безопасности).
 
 ---
