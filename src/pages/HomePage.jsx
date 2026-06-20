@@ -149,14 +149,14 @@ function ModeCompare() {
         <Card tag="Эконом" tagColor={C.primaryDark} name="Kling 2.5 turbo" lines={['Клип 5 секунд', 'Сверхстабильный текст', 'Готово за ~1 минуту', 'Рабочая лошадка для потока']} />
         <Card tag="Премиум" tagColor="#6366F1" name="Veo 3.1 fast" highlight lines={['Клип 8 секунд, 9:16', 'Кинематографичный свет', 'Глубина резкости, наезд', 'Для топовых карточек']} />
       </div>
-      <div style={{ textAlign: 'center', fontSize: 12, color: muted, background: '#F4F7F5', padding: 9, borderRadius: 8 }}>На старте — по 1 бесплатной попытке в каждом режиме</div>
+      <div style={{ textAlign: 'center', fontSize: 12, color: muted, background: '#F4F7F5', padding: 9, borderRadius: 8 }}>На старте — 1 бесплатный ролик Kling и 1 ролик Veo</div>
     </div>
   );
 }
 
 function HeroWidget() {
   const [tab, setTab] = useState('photo');
-  const tabs = [['photo', 'Фото → Видео'], ['text', 'Текст → Иллюстрация'], ['modes', 'Kling vs Veo']];
+  const tabs = [['photo', 'Фото → Видео'], ['text', 'Текст → Иллюстрация'], ['modes', 'Сравнить режимы']];
   return (
     <div style={{ background: glass, backdropFilter: 'blur(22px)', border: '1px solid rgba(16,185,129,0.16)', borderRadius: 22, padding: 18, boxShadow: '0 30px 70px rgba(10,46,31,0.12)' }}>
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: 'rgba(255,255,255,0.55)', padding: 4, borderRadius: 12, border: `1px solid ${line}` }}>
@@ -309,7 +309,7 @@ function Pricing() {
   return (
     <section id="pricing" style={{ background: '#fff', borderTop: `1px solid ${line}` }}>
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '76px 28px' }}>
-        <SectionHead eyebrow="Тарифы" title="Простые пакетные тарифы" subtitle="Платите за готовые ролики. Оплата в рублях через ЮMoney, кредиты не сгорают" />
+        <SectionHead eyebrow="Тарифы" title="Простые пакетные тарифы" subtitle="Платите за готовые ролики. Оплата в рублях через ЮKassa, кредиты не сгорают" />
         <div className="vai-3col" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 22, marginTop: 46, alignItems: 'stretch' }}>
           {PACKAGES.map(p => {
             const pop = !!p.popular;
@@ -347,7 +347,7 @@ function FAQ() {
     ['Работает из России без VPN? Можно платить рублями?', 'Да. Сервис доступен из РФ напрямую, оплата в рублях. VPN не нужен.'],
     ['Сохранится ли текст и логотип на упаковке?', 'Да — это наш фокус. Пресеты движения без вращения берегут читаемость: при наезде и панораме текст не плывёт. Для сложных текстовых товаров есть премиум-режим Veo.'],
     ['Какие форматы на выходе?', 'Вертикальный 9:16 для соцсетей и 3:4 для карточек Wildberries и Ozon. Готовый файл — MP4.'],
-    ['Чем Премиум (Veo) отличается от Эконома (Kling)?', 'Эконом (Kling 2.5) — 5 секунд, максимально стабильный текст, ~1 минута. Премиум (Veo 3.1) — 8 секунд, кинематографичный свет, боке и глубина резкости.'],
+    ['Чем отличаются режимы Эконом, Стандарт и Премиум?', 'Эконом (Kling 2.5) — 5 секунд, максимально стабильный текст, ~1 минута. Стандарт (Cosmos 3 Super) — 7 секунд, детальное следование промпту, баланс цены и качества. Премиум (Veo 3.1) — 8 секунд, кинематографичный свет, боке и глубина резкости.'],
     ['Что если у меня нет хорошего фото товара?', 'Опишите товар словами — Nano Banana 2 создаст концепт-иллюстрацию по описанию, которую затем можно оживить.'],
   ];
   const [open, setOpen] = useState(0);
