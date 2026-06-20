@@ -287,7 +287,16 @@ export function useJobPolling(jobId) {
 - Финальный `input` логировать перед submit.
 
 ### Авторизация
-email → POST `/api/auth/send-code` → код → verify → JWT cookie.
+
+**Email OTP:** `POST /api/auth/send-code` (есть проверка Turnstile) → код на почту (SMTP Mail.ru) → `POST /api/auth/verify` → JWT в httpOnly cookie.
+
+**SSO (OAuth Яндекс ID / VK ID)** — роуты в `server.js`, логика в `server/sso.js`:
+- `GET /api/auth/yandex` → редирект на `oauth.yandex.com/authorize`
+- `GET /api/auth/yandex/callback` → обмен кода на токен, профиль
+- `GET /api/auth/vk` → редирект на `id.vk.com/authorize` (PKCE, secret не нужен)
+- `GET /api/auth/vk/callback` → обмен кода (`id.vk.com/oauth2/auth`), профиль
+
+Поиск пользователя (`findOrCreateSSOUser`): первичный лукап по паре `(provider, provider_id)` в `user_identities`. Найдено — обновляем provider_email/name/avatar и логиним. Не найдено — заводим **новый** `users` + identity. **Аккаунты НЕ связываются молча по совпадению email** (защита от захвата аккаунта через чужой OAuth). Явная привязка провайдера к уже залогиненному пользователю — отдельный путь (`linkProviderToUser`, через `linkUserId`) с проверкой конфликта. Итог входа — JWT в httpOnly cookie.
 
 ### Кнопки (Btn.jsx)
 ```jsx
@@ -359,6 +368,19 @@ CREATE TABLE auth_codes (
   attempts INTEGER DEFAULT 0,        -- блок после 5 попыток
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE TABLE user_identities (         -- SSO: связка внешнего аккаунта (Яндекс/VK) с users
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider VARCHAR(20) NOT NULL,       -- 'yandex' | 'vk'
+  provider_id TEXT NOT NULL,           -- id пользователя у провайдера
+  provider_email TEXT,                 -- email от провайдера (может отсутствовать)
+  provider_name TEXT,                  -- отображаемое имя
+  avatar_url TEXT,                     -- аватар от провайдера
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (provider, provider_id)       -- одна identity на внешний аккаунт
+);
+CREATE INDEX IF NOT EXISTS idx_identities_user ON user_identities (user_id);
 
 CREATE TABLE projects (
   id SERIAL PRIMARY KEY,
