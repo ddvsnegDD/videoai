@@ -181,11 +181,17 @@ videoai/
 │
 ├── server/
 │   ├── db.js                   # PostgreSQL: pool, initDB (+ free_wan/free_veo)
-│   ├── email.js                # Brevo
+│   ├── email.js                # SMTP Mail.ru (nodemailer, smtp.mail.ru:587 STARTTLS) — OTP-письма
 │   ├── auth.js                 # JWT, OTP (sanitizeUser отдаёт free_wan/free_veo)
 │   ├── storage.js              # S3 (uploadBuffer, deleteByPrefix)
 │   ├── jobs.js                 # Очередь задач (тип 'animate', free-tries)
-│   ├── payments.js             # ЮMoney-кошелёк: Quickpay, verifyYooMoneySign (HMAC-SHA256), webhook, идемпотентность по operation_id
+│   ├── payments.js             # ЮKassa v3 (Basic Auth): create→redirect→webhook, верификация GET-запросом, идемпотентность по yookassa_payment_id, reconciler. Legacy ЮMoney-webhook на переходный период
+│   ├── watermark.js            # FFmpeg-вотемарк (spawn, таймаут 60с): плитка 6×8 «VidFlex AI», white@0.55 + border, rotate -0.5. Зовётся из jobs.js Step 7 на free-trial (по input._freeColumn), best-effort — при сбое отдаёт чистое видео
+│   ├── sso.js                  # OAuth Яндекс ID / VK ID (VK — PKCE): init+callback, findOrCreateSSOUser (лукап по provider+provider_id, без молчаливой связки по email), linkProviderToUser
+│   ├── validateEmail.js        # Антифрод-почта: disposable-email-domains + опц. MailboxValidator (флаг, таймаут 5с, мягкая деградация). validateNewEmail блокирует одноразовую и иностранную почту (только РФ-домены)
+│   ├── emailDomains.js         # Списки доменов: BLOCKED_FOREIGN / ALLOWED_RUSSIAN для validateEmail.js
+│   ├── prompts.video.json      # Видео-промпты: пресеты Kling (MOTION_PRESETS) + Cosmos (COSMOS_PRESETS) + негативы. Грузится в falVideo.js (readFileSync+JSON.parse) с фолбэком на встроенные при битом JSON
+│   ├── prompts.image.json      # Системные промпты GigaChat для buildImagePrompt (рус→англ). Грузится в llm.js, с фолбэком
 │   └── providers/
 │       ├── falVideo.js         # ★ fal.ai Kling/Veo, image-to-video, submit→poll→result
 │       ├── falImage.js         # ★ fal.ai Nano Banana 2, text-to-image (extractImageUrl: 6 fallback-путей)
@@ -204,12 +210,14 @@ videoai/
     ├── components/
     │   ├── Layout.jsx          # Glass-шапка кабинета (Outlet), пункт «Админ» по isAdmin(), скрыта на гостевых
     │   ├── Btn.jsx
+    │   ├── YandexMetrika.jsx   # SPA-трекинг просмотров: ym('hit') на смену маршрута (счётчик YM_COUNTER_ID), подключён в App.jsx
     │   └── (legacy: SocialConnector.jsx, PublishScheduler.jsx — вне скоупа)
     ├── lib/
     │   ├── auth.jsx            # AuthProvider
     │   ├── adminConfig.js      # ADMIN_EMAILS + isAdmin() — фронт-гейт админки
     │   ├── theme.js            # Палитра C
     │   ├── hooks.js            # useReveal, useJobPolling
+    │   ├── analytics.js        # Цели Метрики: reachGoal('registration') — конверсия регистрации
     │   └── api.js              # fetch-обёртка
     └── pages/
         ├── HomePage.jsx        # ★ B2B-лендинг (7 секций: Hero+виджет, метрики, шаги, экономика, тарифы из PACKAGES, FAQ, CTA)
