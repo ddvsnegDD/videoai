@@ -95,7 +95,7 @@ function BeforeAfter() {
         onTouchStart={(e) => { dragging.current = true; move(e.touches[0].clientX); }}
         style={{ position: 'relative', width: '100%', maxWidth: 286, margin: '0 auto', aspectRatio: '9 / 16', borderRadius: 16, overflow: 'hidden', background: '#0a1f16', cursor: 'ew-resize', userSelect: 'none', boxShadow: '0 20px 50px rgba(10,46,31,0.22)' }}>
         <video ref={after} src={CLIPS.one} autoPlay loop muted playsInline style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-        {chip(<><Sparkles size={11} style={{ verticalAlign: -1 }} /> Оживление · Kling 2.5</>, 'right', true)}
+        {chip(<><Sparkles size={11} style={{ verticalAlign: -1 }} /> Оживление · Kling / Cosmos / Veo</>, 'right', true)}
         <div style={{ position: 'absolute', inset: 0, clipPath: `inset(0 ${100 - pos}% 0 0)`, zIndex: 2 }}>
           <video ref={before} src={CLIPS.one} muted playsInline preload="auto" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'saturate(0.5) contrast(0.9) brightness(1.14)' }} />
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(244,247,245,0.22)' }} />
@@ -145,8 +145,9 @@ function ModeCompare() {
   );
   return (
     <div style={{ minHeight: 332, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', gap: 12, flex: 1 }}>
+      <div className="vai-mode-cards" style={{ display: 'flex', gap: 12, flex: 1 }}>
         <Card tag="Эконом" tagColor={C.primaryDark} name="Kling 2.5 turbo" lines={['Клип 5 секунд', 'Сверхстабильный текст', 'Готово за ~1 минуту', 'Рабочая лошадка для потока']} />
+        <Card tag="Стандарт" tagColor="#C97A1A" name="Cosmos 3 Super" lines={['Клип 7 секунд, 9:16', 'Детальное следование промпту', 'Баланс цены и качества', 'Золотая середина']} />
         <Card tag="Премиум" tagColor="#6366F1" name="Veo 3.1 fast" highlight lines={['Клип 8 секунд, 9:16', 'Кинематографичный свет', 'Глубина резкости, наезд', 'Для топовых карточек']} />
       </div>
       <div style={{ textAlign: 'center', fontSize: 12, color: muted, background: '#F4F7F5', padding: 9, borderRadius: 8 }}>На старте — 1 бесплатный ролик Kling и 1 ролик Veo</div>
@@ -399,6 +400,7 @@ export default function HomePage() {
           .vai-hero-grid h1 { font-size: 38px !important; }
           .vai-eco-grid { grid-template-columns: 1fr !important; gap: 30px !important; }
           .vai-3col { grid-template-columns: 1fr !important; }
+          .vai-mode-cards { flex-direction: column !important; }
           .vai-nav { display: none !important; }
         }
       `}</style>
