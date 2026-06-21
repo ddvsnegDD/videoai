@@ -115,7 +115,7 @@ export async function submitToFal({ imageUrl, modelKey, motionPrompt, seed, dura
     submitInput = {
       image_url: imageUrl,
       prompt: promptText,
-      duration: durationSec || '5',
+      duration: '5',
       negative_prompt: negatives.wan,
       cfg_scale: 0.5,
     };

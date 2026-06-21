@@ -597,21 +597,16 @@ app.post('/api/jobs', requireAuth, async (req, res) => {
       if (!model) return res.status(400).json({ error: 'invalid_model' });
 
       if (input.modelKey === 'wan') {
-        // Kling: duration 5 or 10, both native single generations
-        const targetDuration = Number(input.targetDuration) || 5;
-        if (![5, 10].includes(targetDuration)) {
-          return res.status(400).json({ error: 'invalid_duration' });
-        }
-
-        const wanCredits = targetDuration * 8; // 5s=40, 10s=80
+        // Kling: fixed 5s only (10s was unfinished, removed to prevent overspend)
+        const wanCredits = model.credits;
         const userRow = await pool.query('SELECT free_wan FROM users WHERE id = $1', [req.userId]);
-        const hasFree = targetDuration === 5 && userRow.rows[0]?.free_wan > 0;
+        const hasFree = userRow.rows[0]?.free_wan > 0;
 
         const { jobId } = await createJob({
           userId: req.userId,
           projectId,
           type,
-          input: { ...input, projectId, durationSec: String(targetDuration) },
+          input: { ...input, projectId, durationSec: '5' },
           costCredits: hasFree ? 0 : wanCredits,
           freeColumn: hasFree ? 'free_wan' : null,
         });
