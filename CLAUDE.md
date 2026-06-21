@@ -405,7 +405,7 @@ CREATE TABLE generation_jobs (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
-  type VARCHAR(50) NOT NULL,         -- 'animate' (актуальный); 'image' добавится в Спринте B
+  type VARCHAR(50) NOT NULL,         -- 'animate' | 'image' (оба актуальны; 'image' добавлен в Спринте B)
   status VARCHAR(20) DEFAULT 'pending', -- pending | running | done | failed
   progress INTEGER DEFAULT 0,
   input JSONB NOT NULL,              -- содержит _freeColumn для возврата при сбое
