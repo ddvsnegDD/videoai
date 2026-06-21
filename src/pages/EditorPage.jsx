@@ -72,7 +72,6 @@ export default function EditorPage() {
   const [motionManual, setMotionManual] = useState(false);
   const [customPrompt, setCustomPrompt] = useState('');
   const [model, setModel] = useState('wan');
-  const [targetDuration, setTargetDuration] = useState(5);
   const [projectId, setProjectId] = useState(null);
   const [continueCount, setContinueCount] = useState(0);
   const [creating, setCreating] = useState(false);
@@ -117,9 +116,9 @@ export default function EditorPage() {
   const freeWan = user?.free_wan ?? 0;
   const freeVeo = user?.free_veo ?? 0;
   const freeImage = user?.free_image ?? 0;
-  const modelCredits = model === 'wan' ? targetDuration * 8 : model === 'cosmos' ? (config?.video_models?.cosmos?.credits ?? 75) : (config?.video_models?.veo?.credits ?? 90);
+  const modelCredits = model === 'wan' ? (config?.video_models?.wan?.credits ?? 40) : model === 'cosmos' ? (config?.video_models?.cosmos?.credits ?? 60) : (config?.video_models?.veo?.credits ?? 90);
   const creditsImage = config?.credits_image ?? 13;
-  const isFree = (model === 'wan' && targetDuration === 5 && freeWan > 0) || (model === 'veo' && freeVeo > 0);
+  const isFree = (model === 'wan' && freeWan > 0) || (model === 'veo' && freeVeo > 0);
   const isFreeImage = freeImage > 0;
   const canAfford = isFree || credits >= modelCredits;
   const needsBack = motion === 'back_view';
@@ -301,7 +300,7 @@ export default function EditorPage() {
         input: {
           imageUrl: needsBack ? backImageUrl : imageUrl,
           modelKey: model,
-          targetDuration: model === 'wan' ? targetDuration : undefined,
+          targetDuration: model === 'wan' ? 5 : undefined,
           motionPrompt: customPrompt.trim() || undefined,
           motionKey: motion,
         },
@@ -330,7 +329,7 @@ export default function EditorPage() {
     setMotionManual(false);
     setShowRegenConfirm(false);
     setShowImagePreview(false);
-    // imageUrl, sourceType, model, targetDuration — сохраняем
+    // imageUrl, sourceType, model — сохраняем
     // productType, details, style — сохраняем (описание того же товара)
     refresh();
   }
@@ -525,8 +524,8 @@ export default function EditorPage() {
             <div style={{ display: 'flex', gap: 14 }}>
               <ModelCard on={model === 'wan'} onClick={() => setModel('wan')}
                 name="Эконом · Kling 2.5"
-                desc={`Клип ${targetDuration} сек. Жёсткое удержание шрифта и геометрии товара. Формат 9:16.`}
-                cost={targetDuration === 5 && freeWan > 0 ? `${freeWan} бесплатно` : `${targetDuration * 8} кредитов`}
+                desc="Клип 5 сек. Жёсткое удержание шрифта и геометрии товара. Формат 9:16."
+                cost={freeWan > 0 ? `${freeWan} бесплатно` : `${config?.video_models?.wan?.credits ?? 40} кредитов`}
                 accent={C.primary} accentLight={C.primaryLight} accentDark={C.primaryDark} />
               <ModelCard on={model === 'cosmos'} onClick={() => setModel('cosmos')}
                 name="Стандарт · Cosmos"
@@ -540,32 +539,6 @@ export default function EditorPage() {
                 accent="#6366F1" accentLight="#EEF2FF" accentDark="#4F46E5" />
             </div>
 
-            {/* Duration selector for Kling */}
-            {model === 'wan' && (
-              <div style={{ marginTop: 14 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.dark, marginBottom: 8 }}>Длительность клипа</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {[5, 10].map(d => {
-                    const on = targetDuration === d;
-                    const dCredits = d * 8;
-                    const dFree = d === 5 && freeWan > 0;
-                    return (
-                      <button key={d} onClick={() => setTargetDuration(d)} style={{
-                        flex: 1, border: on ? `2px solid ${C.primary}` : '1px solid #E2EAE6',
-                        borderRadius: 10, padding: '10px 4px', cursor: 'pointer',
-                        background: on ? C.primaryLight : '#fff', textAlign: 'center',
-                        transition: 'all 0.15s ease',
-                      }}>
-                        <div style={{ fontSize: 16, fontWeight: 800, color: C.dark }}>{d}с</div>
-                        <div style={{ fontSize: 11, color: dFree ? C.primary : '#6B7F74', fontWeight: 600, marginTop: 2 }}>
-                          {dFree ? 'бесплатно' : `${dCredits} кр.`}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
             {model === 'veo' && imageUrl && (
               <div style={{ display: 'flex', gap: 10, background: '#FFF8F0', border: '1px solid #FBD9AE', padding: 12, borderRadius: 10, fontSize: 12.5, color: '#8A5A18', lineHeight: 1.45, marginTop: 14 }}>
@@ -739,7 +712,7 @@ export default function EditorPage() {
               <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ position: 'relative', width: '100%', aspectRatio: '9 / 16', maxHeight: 400, borderRadius: 12, overflow: 'hidden', background: '#000', margin: '0 auto 16px' }}>
                   <video src={videoUrl} controls autoPlay loop muted playsInline style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                  <div style={{ position: 'absolute', top: 12, left: 12, background: 'rgba(0,0,0,0.62)', color: '#fff', padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>{model === 'veo' ? 'Veo 3.1 · 8s' : model === 'cosmos' ? 'Cosmos · 7s' : `Kling 2.5 · ${targetDuration}s`}</div>
+                  <div style={{ position: 'absolute', top: 12, left: 12, background: 'rgba(0,0,0,0.62)', color: '#fff', padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>{model === 'veo' ? 'Veo 3.1 · 8s' : model === 'cosmos' ? 'Cosmos · 7s' : 'Kling 2.5 · 5s'}</div>
                 </div>
                 <a href={videoUrl} download target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
                   <button style={{ width: '100%', border: 'none', background: C.dark, color: '#fff', padding: 14, borderRadius: 11, fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Download size={16} /> Скачать готовый креатив (MP4)</button>
