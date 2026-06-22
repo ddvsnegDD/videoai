@@ -1,5 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useSyncExternalStore } from 'react';
 import { api } from './api.js';
+
+const MQ = '(max-width: 768px)';
+const mql = typeof window !== 'undefined' ? window.matchMedia(MQ) : null;
+function subscribeMQ(cb) { mql?.addEventListener('change', cb); return () => mql?.removeEventListener('change', cb); }
+function getMQSnapshot() { return mql?.matches ?? false; }
+
+export function useIsMobile() {
+  return useSyncExternalStore(subscribeMQ, getMQSnapshot, () => false);
+}
 
 export function useJobPolling(jobId) {
   const [job, setJob] = useState(null);

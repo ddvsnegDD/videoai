@@ -1,9 +1,10 @@
 // src/components/Layout.jsx
-import React from 'react';
+import React, { useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
-import { Sparkles, Shield } from 'lucide-react';
+import { Sparkles, Shield, Menu, X } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { isAdmin } from '../lib/adminConfig';
+import { useIsMobile } from '../lib/hooks';
 import { C } from '../lib/theme';
 import sbpCompactLight from '../assets/sbp/sbp-compact-light.png';
 
@@ -100,15 +101,14 @@ function SiteFooter() {
  * скрыта — там свой хедер внутри HomePage.
  */
 export default function Layout() {
-  // У тебя useAuth() возвращает как минимум { user }. Баланс и выход берём
-  // безопасно: если их нет — UI не сломается.
   const auth = useAuth();
   const user = auth?.user;
   const credits = user?.credits ?? auth?.credits ?? 0;
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const mobile = useIsMobile();
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  // На лендинге и логине не показываем шапку кабинета
   const isGuestPage = pathname === '/' || pathname === '/login' || pathname === '/oferta' || pathname === '/privacy' || pathname === '/consent';
 
   const navItems = [
@@ -135,68 +135,74 @@ export default function Layout() {
     );
   }
 
+  const navLink = ({ to, label, icon: Icon }) => {
+    const active = pathname === to;
+    return (
+      <Link key={to} to={to} onClick={() => setMenuOpen(false)} style={{
+        display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none',
+        background: active ? '#fff' : 'transparent', color: active ? C.dark : C.gray600,
+        padding: mobile ? '12px 16px' : '8px 14px', borderRadius: 9,
+        fontSize: mobile ? 15 : 14, fontWeight: 600, whiteSpace: 'nowrap',
+        boxShadow: active ? '0 2px 8px rgba(10,46,31,0.07)' : 'none',
+      }}>
+        {Icon && <Icon size={14} />}{label}
+      </Link>
+    );
+  };
+
   return (
     <div style={pageBg}>
-      <header
-        style={{
-          position: 'sticky', top: 0, zIndex: 50,
-          background: 'rgba(247,250,248,0.82)', backdropFilter: 'blur(16px)',
-          borderBottom: `1px solid ${C.gray200}`,
-        }}
-      >
-        <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 24px', height: 66, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 30 }}>
-            <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+      <header style={{
+        position: 'sticky', top: 0, zIndex: 50,
+        background: 'rgba(247,250,248,0.82)', backdropFilter: 'blur(16px)',
+        borderBottom: `1px solid ${C.gray200}`,
+      }}>
+        <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 16px', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: mobile ? 12 : 30 }}>
+            <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
               <div style={{ width: 30, height: 30, borderRadius: 9, background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, display: 'grid', placeItems: 'center', boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}>
                 <span style={{ color: '#fff', fontSize: 13, marginLeft: 2 }}>▶</span>
               </div>
               <span style={{ fontFamily: '"Manrope", sans-serif', fontWeight: 800, fontSize: 18, color: C.dark, letterSpacing: '-0.02em' }}>VideoAI</span>
             </Link>
-            <nav style={{ display: 'flex', gap: 6 }}>
-              {navItems.map(({ to, label, icon: Icon }) => {
-                const active = pathname === to;
-                return (
-                  <Link key={to} to={to} style={{
-                    display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none',
-                    background: active ? '#fff' : 'transparent', color: active ? C.dark : C.gray600,
-                    padding: '8px 14px', borderRadius: 9, fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap',
-                    boxShadow: active ? '0 2px 8px rgba(10,46,31,0.07)' : 'none',
-                  }}>
-                    {Icon && <Icon size={14} />}{label}
-                  </Link>
-                );
-              })}
-            </nav>
+            {!mobile && <nav style={{ display: 'flex', gap: 6 }}>{navItems.map(navLink)}</nav>}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: mobile ? 10 : 18 }}>
             <button onClick={() => navigate('/billing')} style={{
-              display: 'flex', alignItems: 'center', gap: 7, background: C.primaryLight, color: C.primaryDark,
-              border: 'none', cursor: 'pointer', padding: '8px 14px', borderRadius: 100, fontSize: 13.5, fontWeight: 700,
+              display: 'flex', alignItems: 'center', gap: 6, background: C.primaryLight, color: C.primaryDark,
+              border: 'none', cursor: 'pointer', padding: mobile ? '6px 10px' : '8px 14px', borderRadius: 100, fontSize: 13, fontWeight: 700,
             }}>
-              <Sparkles size={14} /> {credits ?? 0} кредитов
+              <Sparkles size={14} /> {credits ?? 0}
             </button>
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => navigate('/account')}
-                title={(() => {
-                  const ids = user?.identities || [];
-                  const hasYandex = ids.some(i => i.provider === 'yandex');
-                  const hasVk = ids.some(i => i.provider === 'vk');
-                  const displayName = user?.name || user?.email || (hasVk ? 'Пользователь VK' : hasYandex ? 'Пользователь Яндекс' : 'Пользователь');
-                  const methods = [user?.email && 'Email', hasYandex && 'Яндекс', hasVk && 'VK'].filter(Boolean).join(', ');
-                  return `${displayName}\n${methods ? `Вход: ${methods}` : ''}\nЛичный кабинет`;
-                })()}
-                style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: 'pointer', overflow: 'hidden', padding: 0, background: user?.avatar_url ? 'transparent' : `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, color: '#fff', fontWeight: 700, fontSize: 14 }}
-              >
-                {user?.avatar_url ? (
-                  <img src={user.avatar_url} alt="" style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', display: 'block' }} referrerPolicy="no-referrer" />
-                ) : (
-                  (user?.name?.[0] || user?.email?.[0] || 'U').toUpperCase()
-                )}
+            <button
+              onClick={() => navigate('/account')}
+              style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: 'pointer', overflow: 'hidden', padding: 0, flexShrink: 0, background: user?.avatar_url ? 'transparent' : `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, color: '#fff', fontWeight: 700, fontSize: 14 }}
+            >
+              {user?.avatar_url ? (
+                <img src={user.avatar_url} alt="" style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', display: 'block' }} referrerPolicy="no-referrer" />
+              ) : (
+                (user?.name?.[0] || user?.email?.[0] || 'U').toUpperCase()
+              )}
+            </button>
+            {mobile && (
+              <button onClick={() => setMenuOpen(o => !o)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'grid', placeItems: 'center', color: C.dark }}>
+                {menuOpen ? <X size={22} /> : <Menu size={22} />}
               </button>
-            </div>
+            )}
           </div>
         </div>
+
+        {/* Mobile dropdown nav */}
+        {mobile && menuOpen && (
+          <nav style={{
+            display: 'flex', flexDirection: 'column', gap: 2,
+            padding: '8px 16px 16px',
+            background: 'rgba(247,250,248,0.96)', backdropFilter: 'blur(16px)',
+            borderTop: `1px solid ${C.gray200}`,
+          }}>
+            {navItems.map(navLink)}
+          </nav>
+        )}
       </header>
       <Outlet />
       <SiteFooter />

@@ -1,4 +1,5 @@
 import { fal } from '@fal-ai/client';
+import { randomBytes } from 'crypto';
 import { uploadBuffer } from '../storage.js';
 import { retryWithBackoff } from '../lib/retry.js';
 import { readFileSync } from 'fs';
@@ -232,7 +233,8 @@ export async function reuploadToS3({ falUrl, projectId }) {
       if (!videoRes.ok) throw new Error(`Download failed: ${videoRes.status}`);
       const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
 
-      const key = `projects/${projectId}/creative-${Date.now()}.mp4`;
+      const secret = randomBytes(12).toString('hex');
+      const key = `projects/${projectId}/creative-${secret}-${Date.now()}.mp4`;
       const ourUrl = await uploadBuffer({ buffer: videoBuffer, key, contentType: 'video/mp4' });
       console.log(`[Anti-leak] Uploaded to S3: ${ourUrl} (${videoBuffer.length} bytes)`);
       return { s3_url: ourUrl };

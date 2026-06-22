@@ -5,7 +5,7 @@ import multer from 'multer';
 import { resolve, join } from 'path';
 import pool, { initDB } from './server/db.js';
 import { sendCode, verifyCode, requireAuth, getMe } from './server/auth.js';
-import { createJob, getJob, listJobs, runWatchdog, startReconciler } from './server/jobs.js';
+import { createJob, getJob, getJobInternal, listJobs, runWatchdog, startReconciler } from './server/jobs.js';
 import { VIDEO_MODELS, MOTION_PRESETS, COSMOS_PRESETS } from './server/providers/falVideo.js';
 import { IMAGE_MODEL } from './server/providers/falImage.js';
 import { uploadBuffer, deleteByPrefix } from './server/storage.js';
@@ -686,7 +686,7 @@ app.get('/api/jobs/:id', requireAuth, async (req, res) => {
 
 app.get('/api/jobs/:id/video', requireAuth, async (req, res) => {
   try {
-    const job = await getJob(req.params.id, req.userId);
+    const job = await getJobInternal(req.params.id, req.userId);
     if (!job) return res.status(404).json({ error: 'not_found' });
     if (job.status !== 'done' || !job.output?.video_url) {
       return res.status(400).json({ error: 'video_not_ready' });

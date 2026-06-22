@@ -111,6 +111,21 @@ export async function getJob(jobId, userId) {
      FROM generation_jobs WHERE id = $1 AND user_id = $2`,
     [jobId, userId],
   );
+  if (result.rows.length === 0) return null;
+  const row = result.rows[0];
+  if (row.output?.video_url_clean) {
+    row.output = { ...row.output };
+    delete row.output.video_url_clean;
+  }
+  return row;
+}
+
+export async function getJobInternal(jobId, userId) {
+  const result = await pool.query(
+    `SELECT id, type, status, progress, output, error, seed, created_at, updated_at
+     FROM generation_jobs WHERE id = $1 AND user_id = $2`,
+    [jobId, userId],
+  );
   return result.rows[0] || null;
 }
 
@@ -126,7 +141,13 @@ export async function listJobs({ userId, projectId }) {
      FROM generation_jobs WHERE ${where} ORDER BY created_at DESC LIMIT 50`,
     params,
   );
-  return result.rows;
+  return result.rows.map(row => {
+    if (row.output?.video_url_clean) {
+      row.output = { ...row.output };
+      delete row.output.video_url_clean;
+    }
+    return row;
+  });
 }
 
 // ── Job runner ──

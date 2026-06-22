@@ -9,7 +9,7 @@ import {
 import { C } from '../lib/theme';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { useJobPolling } from '../lib/hooks';
+import { useJobPolling, useIsMobile } from '../lib/hooks';
 
 const glassPanel = {
   background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(20px)',
@@ -42,6 +42,8 @@ function ModelCard({ on, onClick, name, desc, cost, accent, accentLight, accentD
 export default function EditorPage() {
   const navigate = useNavigate();
   const { user, refresh } = useAuth();
+  const mobile = useIsMobile();
+  const monitorRef = useRef(null);
 
   const [config, setConfig] = useState(null);
 
@@ -97,9 +99,12 @@ export default function EditorPage() {
     setMotion(MOTIONS[continueCount % MOTIONS.length].id);
   }, [continueCount, motionManual]);
 
-  // Refresh credits on job completion
+  // Refresh credits on job completion + scroll to result on mobile
   useEffect(() => {
     if (job?.status === 'done' || job?.status === 'failed') refresh();
+    if (job?.status === 'done' && monitorRef.current) {
+      monitorRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }, [job?.status]);
 
   // When image job completes
@@ -375,13 +380,13 @@ export default function EditorPage() {
   const stepNum = (n) => <span style={{ color: C.primary, fontFamily: '"Manrope", sans-serif' }}>{n}</span>;
 
   return (
-    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '28px 24px 56px' }}>
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: mobile ? '20px 12px 40px' : '28px 24px 56px' }}>
       <style>{`@keyframes va-spin { to { transform: rotate(360deg); } } @media (max-width: 920px){ .va-editor-grid{ grid-template-columns:1fr !important; } }`}</style>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 26 }}>
-        <button onClick={() => navigate('/dashboard')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, color: '#46594F', fontSize: 14, fontWeight: 600 }}><ArrowLeft size={16} /> К проектам</button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: mobile ? 10 : 16, marginBottom: mobile ? 18 : 26 }}>
+        <button onClick={() => navigate('/dashboard')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, color: '#46594F', fontSize: 14, fontWeight: 600 }}><ArrowLeft size={16} />{!mobile && ' К проектам'}</button>
         <div style={{ width: 1, height: 16, background: '#E2E8F0' }} />
-        <h1 style={{ fontFamily: '"Manrope", sans-serif', fontSize: 23, fontWeight: 800, color: C.dark, margin: 0, letterSpacing: '-0.02em' }}>
+        <h1 style={{ fontFamily: '"Manrope", sans-serif', fontSize: mobile ? 19 : 23, fontWeight: 800, color: C.dark, margin: 0, letterSpacing: '-0.02em' }}>
           {phase === 'done' ? 'Креатив готов' : 'Новый видеокреатив'}
         </h1>
       </div>
@@ -485,12 +490,12 @@ export default function EditorPage() {
           {/* Шаг 2: Стиль движения камеры */}
           <div style={{ ...glassPanel, opacity: imageUrl && !showImagePreview ? 1 : 0.5, pointerEvents: imageUrl && !showImagePreview ? 'auto' : 'none' }}>
             <h2 style={{ fontSize: 17, fontWeight: 800, margin: '0 0 14px', fontFamily: '"Manrope", sans-serif', color: C.dark }}>{stepNum('02.')} Стиль движения камеры</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: mobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: mobile ? 10 : 12 }}>
               {[...MOTIONS, BACK_VIEW].map(m => {
                 const on = motion === m.id && !customPrompt.trim();
                 return (
-                  <button key={m.id} onClick={() => { setMotion(m.id); setMotionManual(true); setCustomPrompt(''); }} style={{ textAlign: 'left', cursor: 'pointer', padding: 14, borderRadius: 12, background: '#fff', border: on ? `2px solid ${C.primary}` : '1px solid #E2EAE6', boxShadow: on ? '0 8px 16px rgba(16,185,129,0.1)' : 'none' }}>
-                    <div style={{ width: 34, height: 34, borderRadius: 8, background: on ? C.primaryLight : '#F1F5F9', display: 'grid', placeItems: 'center', color: on ? C.primary : '#64748B', marginBottom: 10 }}><Video size={16} /></div>
+                  <button key={m.id} onClick={() => { setMotion(m.id); setMotionManual(true); setCustomPrompt(''); }} style={{ textAlign: 'left', cursor: 'pointer', padding: mobile ? 12 : 14, borderRadius: 12, background: '#fff', border: on ? `2px solid ${C.primary}` : '1px solid #E2EAE6', boxShadow: on ? '0 8px 16px rgba(16,185,129,0.1)' : 'none' }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 8, background: on ? C.primaryLight : '#F1F5F9', display: 'grid', placeItems: 'center', color: on ? C.primary : '#64748B', marginBottom: 8 }}><Video size={16} /></div>
                     <div style={{ fontWeight: 700, fontSize: 13.5, color: C.dark, marginBottom: 2 }}>{m.name}</div>
                     <div style={{ fontSize: 11.5, color: '#6B7F74', lineHeight: 1.3 }}>{m.desc}</div>
                   </button>
@@ -538,7 +543,7 @@ export default function EditorPage() {
           {/* Шаг 3: Режим рендеринга */}
           <div style={{ ...glassPanel, opacity: imageUrl && !showImagePreview ? 1 : 0.5, pointerEvents: imageUrl && !showImagePreview ? 'auto' : 'none' }}>
             <h2 style={{ fontSize: 17, fontWeight: 800, margin: '0 0 14px', fontFamily: '"Manrope", sans-serif', color: C.dark }}>{stepNum('03.')} Режим рендеринга</h2>
-            <div style={{ display: 'flex', gap: 14 }}>
+            <div style={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: mobile ? 10 : 14 }}>
               <ModelCard on={model === 'wan'} onClick={() => setModel('wan')}
                 name="Эконом · Kling 2.5"
                 desc="Клип 5 сек. Жёсткое удержание шрифта и геометрии товара. Формат 9:16."
@@ -591,8 +596,8 @@ export default function EditorPage() {
         </div>
 
         {/* ═══ Монитор (правая колонка) ═══ */}
-        <div style={{ position: 'sticky', top: 86 }}>
-          <div style={{ ...glassPanel, minHeight: 540, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+        <div ref={monitorRef} style={mobile ? {} : { position: 'sticky', top: 86 }}>
+          <div style={{ ...glassPanel, minHeight: mobile ? 300 : 540, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
 
             {/* IDLE */}
             {phase === 'idle' && (
