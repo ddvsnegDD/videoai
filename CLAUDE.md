@@ -69,7 +69,7 @@ mail_hosting: "VK WorkSpace (Mail.ru)"
 ## Статус спринтов (актуально)
 
 - **Спринт 0 — ЗАВЕРШЁН.** Лендинг на Railway, домен ddvideoai.ru с HTTPS, базовая структура.
-- **Спринт 1 — ЗАВЕРШЁН.** Авторизация email OTP (Brevo), JWT в httpOnly cookie, кабинет, приветственные кредиты (`WELCOME_CREDITS`, дефолт 50). Таблицы `users`, `auth_codes` (с `attempts` для brute-force защиты). Безопасность: crypto.randomInt для OTP, обязательный JWT_SECRET (без fallback), лимит 5 попыток, rate limit 60 сек, очистка протухших кодов.
+- **Спринт 1 — ЗАВЕРШЁН.** Авторизация email OTP (Brevo), JWT в httpOnly cookie, кабинет, приветственные кредиты (`WELCOME_CREDITS`, дефолт 0). Таблицы `users`, `auth_codes` (с `attempts` для brute-force защиты). Безопасность: crypto.randomInt для OTP, обязательный JWT_SECRET (без fallback), лимит 5 попыток, rate limit 60 сек, очистка протухших кодов.
 - **Спринт 2 — ЗАВЕРШЁН, частично перекрыт пивотом.** Движок задач (jobs + polling + retry + watchdog + возврат кредитов), таблицы `projects` и `generation_jobs`, EditorPage. Движок задач переиспользуется и сейчас. GigaChat (`llm.js`) сохранён для Спринта B; генерация сценариев/раскадровка демонтированы.
 - **Спринт 3 — ОТМЕНЁН пивотом.** Yandex ART, SpeechKit, раскадровка (storyboard), выбор голоса — удалены в Спринте A. Yandex Object Storage (S3) сохранён и используется.
 - **Спринт A — ЗАВЕРШЁН (с хвостами).** Демонтаж старого пайплайна; `falVideo.js` (image-to-video); загрузка фото (`multer` → S3); тип задачи `animate`; free-попытки; переработка EditorPage/ProjectPage. **Эконом-модель заменена Wan 2.7 → Kling 2.5 turbo** (дешевле и стабильнее). **Денежная утечка закрыта** — фикс из 5 слоёв + reconciler, подтверждён сквозным тестом №2 на проде (перезапуск в середине → дочитка без второго списания, $0.21). Хвосты: проверить `seed` у Kling, прогнать Veo, переписать промпты движения (убрать `rotation`), лендинг. Детали — `SPRINT_A_REPORT.md`.
@@ -169,7 +169,6 @@ videoai/
 ├── server.js                   # Express: API + статика
 ├── vite.config.js
 ├── ecosystem.config.cjs        # PM2 конфиг (ОБЯЗАТЕЛЬНО .cjs, не .js — ESM проект)
-├── DEPLOY.md                   # Инструкция деплоя на VPS
 ├── .env.example                # Шаблон переменных окружения (23 ключа)
 ├── nginx/videoai.conf          # Конфиг Nginx reverse-proxy
 ├── CLAUDE.md                   # Этот файл
@@ -186,10 +185,10 @@ videoai/
 │   ├── storage.js              # S3 (uploadBuffer, deleteByPrefix)
 │   ├── jobs.js                 # Очередь задач (тип 'animate', free-tries)
 │   ├── payments.js             # ЮKassa v3 (Basic Auth): create→redirect→webhook, верификация GET-запросом, идемпотентность по yookassa_payment_id, reconciler. Legacy ЮMoney-webhook на переходный период
-│   ├── watermark.js            # FFmpeg-вотемарк (spawn, таймаут 60с): плитка 6×8 «VidFlex AI», white@0.55 + border, rotate -0.5. Зовётся из jobs.js Step 7 на free-trial (по input._freeColumn), best-effort — при сбое отдаёт чистое видео
-│   ├── sso.js                  # OAuth Яндекс ID / VK ID (VK — PKCE): init+callback, findOrCreateSSOUser (лукап по provider+provider_id, без молчаливой связки по email), linkProviderToUser
-│   ├── validateEmail.js        # Антифрод-почта: disposable-email-domains + опц. MailboxValidator (флаг, таймаут 5с, мягкая деградация). validateNewEmail блокирует одноразовую и иностранную почту (только РФ-домены)
-│   ├── emailDomains.js         # Списки доменов: BLOCKED_FOREIGN / ALLOWED_RUSSIAN для validateEmail.js
+│   ├── watermark.js            # FFmpeg-вотемарк (spawn, таймаут 60с): плитка 6×8 «VidFlex AI», white@0.55 + border, rotate -0.5. Зовётся из jobs.js Step 7 на free-trial (по input._freeColumn), best-effort — при сбое отдаёт чистое видео. Сохраняет оба URL: `video_url_clean` (случайный S3-ключ, 96 бит, серверный) и `video_url` (watermarked, публичный). Clean-URL зачищается из getJob/listJobs API; отдаётся только платящим через `/api/jobs/:id/video`
+│   ├── rateLimit.js            # In-memory IP rate limiter (2 регистрации/час, NAT-friendly хвост /24)
+│   ├── sso.js                  # OAuth Яндекс ID / VK ID (VK — PKCE): init+callback, findOrCreateSSOUser (лукап по provider+provider_id, без молчаливой связки по email), linkProviderToUser. VK-кнопка скрыта на фронте (маршруты живы) до починки VK ID app config
+│   ├── validateEmail.js        # Антифрод-почта: disposable-email-domains + опц. MailboxValidator (флаг, таймаут 5с, мягкая деградация). Блокирует одноразовые домены; whitelist РФ-доменов убран
 │   ├── prompts.video.json      # Видео-промпты: пресеты Kling (MOTION_PRESETS) + Cosmos (COSMOS_PRESETS) + негативы. Грузится в falVideo.js (readFileSync+JSON.parse) с фолбэком на встроенные при битом JSON
 │   ├── prompts.image.json      # Системные промпты GigaChat для buildImagePrompt (рус→англ). Грузится в llm.js, с фолбэком
 │   └── providers/
@@ -208,7 +207,7 @@ videoai/
     ├── data/
     │   └── tariffs.js          # ★ Единый источник тарифов: 3 пакета (hook/product_shots/seller)
     ├── components/
-    │   ├── Layout.jsx          # Glass-шапка кабинета (Outlet), пункт «Админ» по isAdmin(), скрыта на гостевых
+    │   ├── Layout.jsx          # Glass-шапка кабинета (Outlet), бургер-меню на mobile (<768px), пункт «Админ» по isAdmin(), скрыта на гостевых
     │   ├── Btn.jsx
     │   ├── YandexMetrika.jsx   # SPA-трекинг просмотров: ym('hit') на смену маршрута (счётчик YM_COUNTER_ID), подключён в App.jsx
     │   └── (legacy: SocialConnector.jsx, PublishScheduler.jsx — вне скоупа)
@@ -216,7 +215,7 @@ videoai/
     │   ├── auth.jsx            # AuthProvider
     │   ├── adminConfig.js      # ADMIN_EMAILS + isAdmin() — фронт-гейт админки
     │   ├── theme.js            # Палитра C
-    │   ├── hooks.js            # useReveal, useJobPolling
+    │   ├── hooks.js            # useIsMobile (useSyncExternalStore + matchMedia 768px), useReveal, useJobPolling
     │   ├── analytics.js        # Цели Метрики: reachGoal('registration') — конверсия регистрации
     │   └── api.js              # fetch-обёртка
     └── pages/
@@ -336,7 +335,8 @@ app.use(cookieParser());
 // 4. Config (GET /api/config — модели + пресеты движения + цены)
 // 5. Projects CRUD
 // 6. Jobs (POST type='animate' с проверкой free-tries, polling, отмена)
-// 7. Payments (ЮMoney: POST /create → Quickpay URL; POST /yoomoney-webhook → проверка sign + начисление; GET /history)
+// 6a. GET /api/jobs/:id/video — серверный гейт: has_paid → clean URL, иначе → watermarked + upsell
+// 7. Payments (ЮKassa: POST /create → redirect; POST /yookassa/webhook → верификация GET; GET /history)
 // 8. Admin
 
 // 9. Статика + SPA fallback (ВСЕГДА ПОСЛЕДНИМ)
@@ -361,9 +361,9 @@ CREATE TABLE users (
   name VARCHAR(255),
   role VARCHAR(20) DEFAULT 'user',
   credits INTEGER DEFAULT 0,
-  free_wan INTEGER DEFAULT 1,        -- бесплатная пробная генерация Wan/Kling (эконом)
-  free_veo INTEGER DEFAULT 1,        -- бесплатная пробная генерация Veo (премиум)
-  free_image INTEGER DEFAULT 1,      -- бесплатная пробная генерация картинки (Спринт B)
+  free_wan INTEGER DEFAULT 1,        -- бесплатная пробная генерация Kling (эконом); env: FREE_WAN_EMAIL=1, FREE_WAN_SSO=1
+  free_veo INTEGER DEFAULT 0,        -- бесплатная пробная генерация Veo (премиум); дефолт 0
+  free_image INTEGER DEFAULT 0,      -- бесплатная пробная генерация картинки; дефолт 0
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -472,8 +472,9 @@ CREATE TABLE pending_receipts (
 - **Kling 2.5 (эконом):** `CREDITS_WAN` (дефолт 40) — имя переменной осталось от Wan, но управляет Kling-тарифом; факт ~$0.21/ролик
 - **Veo (премиум):** `CREDITS_VEO` (дефолт 90)
 - **Картинка (Спринт B):** `CREDITS_IMAGE` (дефолт 13); факт ~$0.08/картинка Nano Banana
-- **Пробник:** `free_wan` / `free_veo` / `free_image` = по 1 на старте — не списывают кредиты. _freeColumn различает все три.
-- Приветственные кредиты: `WELCOME_CREDITS` (дефолт 50).
+- **Пробник:** `free_wan` = 1 (одна бесплатная Kling-генерация); `free_veo` = 0, `free_image` = 0 (отключены). `_freeColumn` различает все три.
+- Приветственные кредиты: `WELCOME_CREDITS` / `WELCOME_CREDITS_EMAIL` (дефолт 0 — стартовых кредитов нет).
+- **has_paid:** вычисляется на лету в `getMe()` (`SELECT COUNT(*) FROM payments WHERE user_id=$1 AND status='completed'` > 0). Определяет доступ к clean-видео без водяного знака.
 - При сбое генерации — кредиты или free-попытка возвращаются.
 
 **Тарифы (актуальная сетка — 3 пакета с универсальными кредитами):**
@@ -540,10 +541,16 @@ export default defineConfig({
 - DNS — **Cloudflare**, A-записи `ddvideoai.ru` + `www` → `194.226.20.185`, **режим DNS only** (серое облако; SSL терминируется на сервере).
 - **Yandex Object Storage** (бакет `videoai-media`) — без изменений, файлы в РФ.
 
+### Деплой
+- Путь на сервере: `/home/deploy/app` (НЕ `/var/www/videoai` — это неверный путь, НЕ использовать).
+- PM2 процесс: `videoai`, id 0.
+- Команда деплоя: `cd /home/deploy/app && git pull origin main && npm run build && pm2 restart videoai`
+- **Правило:** после завершения правок **обязательно** коммитить и пушить в `origin/main` сразу, сообщая хеш коммита. Незапушенные правки не попадают на сервер при деплое.
+
 ### Правки кода под VPS
 - `server.js`: добавлен `app.set('trust proxy', 1)` — приложение за Nginx.
 - `server/db.js`: SSL стал условным — отключается для `localhost`/`127.0.0.1` (локальный Postgres SSL не требует).
-- Добавлены: `.env.example` (23 ключа), `nginx/videoai.conf`, `ecosystem.config.cjs`, `DEPLOY.md`.
+- Добавлены: `.env.example` (23 ключа), `nginx/videoai.conf`, `ecosystem.config.cjs`.
 - **Важно:** `ecosystem.config.cjs` (НЕ `.js`) — проект ESM (`"type": "module"`), `.js` с `module.exports` падает.
 
 ### Переменные окружения (`.env` на сервере)
@@ -557,7 +564,7 @@ SMTP_USER=noreply@ddvideoai.ru
 SMTP_PASS                  # пароль приложения Mail.ru
 EMAIL_FROM=noreply@ddvideoai.ru
 ADMIN_EMAIL               # промоут в admin
-WELCOME_CREDITS           # приветственные кредиты (дефолт 50)
+WELCOME_CREDITS           # приветственные кредиты (дефолт 0)
 CREDITS_IMAGE             # стоимость картинки Nano Banana (дефолт 13)
 GIGACHAT_AUTH_KEY         # OAuth-ключ GigaChat (активен — buildImagePrompt)
 GIGACHAT_SCOPE            # scope GigaChat (дефолт GIGACHAT_API_PERS)
