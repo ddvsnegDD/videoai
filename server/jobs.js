@@ -339,7 +339,9 @@ async function runAnimate(input, jobId, seed, projectId) {
   }
 
   // Step 7: Watermark for free-trial clips (best-effort, never fails the job)
+  // Stores both clean and watermarked URLs — has_paid flag controls which one is served
   if (input._freeColumn) {
+    output.video_url_clean = output.video_url;
     try {
       const { applyWatermark } = await import('./watermark.js');
       const { uploadBuffer } = await import('./storage.js');
@@ -363,13 +365,14 @@ async function runAnimate(input, jobId, seed, projectId) {
         const wmKey = `projects/${projectId}/creative-wm-${Date.now()}.mp4`;
         const wmUrl = await uploadBuffer({ buffer: wmBuffer, key: wmKey, contentType: 'video/mp4' });
         output.video_url = wmUrl;
-        console.log(`[runAnimate] Job ${jobId}: watermark applied (free trial)`);
+        console.log(`[runAnimate] Job ${jobId}: watermark applied (free trial), clean URL preserved`);
       } finally {
         await unlink(srcPath).catch(() => {});
         await unlink(wmPath).catch(() => {});
       }
     } catch (wmErr) {
       console.warn(`[runAnimate] Job ${jobId}: watermark failed, keeping clean video: ${wmErr.message}`);
+      delete output.video_url_clean;
     }
   }
 

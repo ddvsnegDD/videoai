@@ -19,6 +19,7 @@ export default function LoginPage() {
     if (ssoErr === 'csrf') return 'Ошибка безопасности. Попробуйте ещё раз.';
     if (ssoErr === 'token' || ssoErr === 'profile') return 'Не удалось войти через этот сервис. Попробуйте ещё раз.';
     if (ssoErr === 'server') return 'Ошибка сервера при входе. Попробуйте позже.';
+    if (ssoErr === 'rate_limit') return 'С этого подключения недавно регистрировались. Попробуйте позже или войдите в существующий аккаунт.';
     return '';
   });
   const [countdown, setCountdown] = useState(0);
@@ -91,6 +92,10 @@ export default function LoginPage() {
 
   async function handleSendCode(e) {
     e.preventDefault();
+    if (!agreed) {
+      setError('Поставьте галочку согласия с офертой');
+      return;
+    }
     if (!email.includes('@')) {
       setError('Введите корректный email');
       return;
@@ -109,6 +114,8 @@ export default function LoginPage() {
         setError(err.data.message);
       } else if (err.data?.error === 'too_soon') {
         setError(`Подождите ${err.data.wait} сек перед повторной отправкой`);
+      } else if (err.data?.error === 'reg_rate_limit') {
+        setError(err.data.message || 'С этого подключения недавно регистрировались. Попробуйте позже.');
       } else {
         setError('Ошибка отправки кода. Попробуйте позже.');
       }
@@ -129,6 +136,9 @@ export default function LoginPage() {
         setStep('email');
       } else if (err.data?.error === 'invalid_code') {
         setError('Неверный или просроченный код');
+      } else if (err.data?.error === 'reg_rate_limit') {
+        setError(err.data.message || 'С этого подключения недавно регистрировались. Попробуйте позже.');
+        setStep('email');
       } else {
         setError('Ошибка проверки кода');
       }
@@ -255,14 +265,6 @@ export default function LoginPage() {
                     autoComplete="email"
                   />
                 </div>
-                <p style={{
-                  fontSize: '0.75rem',
-                  color: C.gray400,
-                  marginBottom: 16,
-                  lineHeight: 1.4,
-                }}>
-                  Для новых аккаунтов разрешены российские почтовые сервисы (Яндекс, Mail.ru)
-                </p>
 
                 {error && (
                   <p style={{
@@ -311,7 +313,7 @@ export default function LoginPage() {
                 <Btn
                   variant="primary"
                   size="lg"
-                  disabled={loading || !email || !agreed}
+                  disabled={loading || !email}
                   style={{ width: '100%' }}
                 >
                   {loading ? (
@@ -332,35 +334,26 @@ export default function LoginPage() {
                 <div style={{ flex: 1, height: 1, background: C.gray200 }} />
               </div>
 
-              {/* SSO bonus hint — text caption, not a button */}
-              <p style={{
-                textAlign: 'center', margin: '0 0 14px',
-                fontSize: '0.75rem', color: C.primaryDark, fontWeight: 500,
-              }}>
-                +50 кредитов за вход через Яндекс или VK
-              </p>
-
               {/* SSO buttons — gated by consent checkbox */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {[
                   { href: '/api/auth/yandex', label: 'Войти через Яндекс', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="#FC3F1D"/><path d="M13.32 7.2h-.93c-1.68 0-2.57.98-2.57 2.43 0 1.64.62 2.4 1.9 3.35l1.05.79-3.07 4.63h-2.2l2.78-4.11c-1.6-1.23-2.5-2.35-2.5-4.3 0-2.5 1.72-4.19 4.57-4.19h2.84v12.6h-1.87V7.2z" fill="#fff"/></svg> },
-                  { href: '/api/auth/vk', label: 'Войти через ВКонтакте', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="#0077FF"/><path d="M12.77 16.25h.73s.22-.02.33-.14c.1-.1.1-.31.1-.31s-.01-1.12.5-1.29c.5-.16 1.15 1.06 1.84 1.53.52.36.92.28.92.28l1.85-.03s.97-.06.51-.83c-.04-.06-.26-.58-1.33-1.63-1.12-1.1-.97-.92.38-2.82.82-1.16 1.15-1.86 1.05-2.16-.1-.29-.7-.21-.7-.21l-2.08.01s-.15-.02-.27.05c-.11.07-.18.24-.18.24s-.33.88-.76 1.63c-.92 1.58-1.29 1.66-1.44 1.56-.35-.24-.26-1.04-.26-1.6 0-1.72.26-2.44-.51-2.63-.26-.06-.44-.1-1.1-.11-.84-.01-1.55 0-1.95.2-.27.13-.47.43-.35.45.16.02.52.1.71.36.25.34.24 1.1.24 1.1s.14 2.03-.33 2.28c-.33.17-.78-.18-1.74-1.77-.44-.73-.77-1.53-.77-1.53s-.06-.16-.18-.24c-.14-.1-.34-.13-.34-.13l-1.97.01s-.3.01-.4.14c-.1.11-.01.35-.01.35s1.53 3.59 3.26 5.4c1.59 1.66 3.39 1.55 3.39 1.55z" fill="#fff"/></svg> },
+                  // VK ID temporarily hidden — app config needs fixing before re-enabling
+                  // { href: '/api/auth/vk', label: 'Войти через ВКонтакте', icon: ... },
                 ].map(({ href, label, icon }) => (
                   <a
                     key={href}
                     href={agreed ? href : undefined}
-                    onClick={e => { if (!agreed) e.preventDefault(); }}
+                    onClick={e => { if (!agreed) { e.preventDefault(); setError('Поставьте галочку согласия с офертой'); } }}
                     style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
                       width: '100%', padding: '12px 16px', borderRadius: 12,
                       border: `1.5px solid ${C.gray200}`, background: C.white,
-                      color: agreed ? C.dark : C.gray400, fontSize: '0.9375rem', fontWeight: 600,
-                      textDecoration: 'none', cursor: agreed ? 'pointer' : 'not-allowed',
-                      opacity: agreed ? 1 : 0.55,
-                      transition: 'border-color 0.2s, box-shadow 0.2s, opacity 0.2s',
-                      pointerEvents: agreed ? 'auto' : 'none',
+                      color: C.dark, fontSize: '0.9375rem', fontWeight: 600,
+                      textDecoration: 'none', cursor: 'pointer',
+                      transition: 'border-color 0.2s, box-shadow 0.2s',
                     }}
-                    onMouseEnter={e => { if (agreed) { e.currentTarget.style.borderColor = C.primary; e.currentTarget.style.boxShadow = `0 0 0 3px rgba(16,185,129,0.08)`; } }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = C.primary; e.currentTarget.style.boxShadow = `0 0 0 3px rgba(16,185,129,0.08)`; }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.boxShadow = 'none'; }}
                   >
                     {icon}

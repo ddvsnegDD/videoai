@@ -1,13 +1,14 @@
 import { randomBytes, createHash } from 'crypto';
 import jwt from 'jsonwebtoken';
 import pool from './db.js';
+import { checkRegLimit } from './rateLimit.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRY = '30d';
-const WELCOME_CREDITS = Number(process.env.WELCOME_CREDITS) || 50;
+const WELCOME_CREDITS = Number(process.env.WELCOME_CREDITS) || 0;
 const FREE_WAN_SSO = parseInt(process.env.FREE_WAN_SSO ?? '1', 10);
-const FREE_VEO_SSO = parseInt(process.env.FREE_VEO_SSO ?? '1', 10);
-const FREE_IMAGE_SSO = parseInt(process.env.FREE_IMAGE_SSO ?? '1', 10);
+const FREE_VEO_SSO = parseInt(process.env.FREE_VEO_SSO ?? '0', 10);
+const FREE_IMAGE_SSO = parseInt(process.env.FREE_IMAGE_SSO ?? '0', 10);
 const CONSENT_VERSION = '2026-06-08';
 
 const COOKIE_OPTS = {
@@ -51,7 +52,7 @@ function sanitizeUser(row) {
 
 // ── Login flow: find user by identity or create new ──
 
-async function findOrCreateSSOUser(provider, providerId, email, name, avatarUrl, withConsent) {
+async function findOrCreateSSOUser(provider, providerId, email, name, avatarUrl, withConsent, ip) {
   // 1. Search user_identities table (primary lookup)
   const byIdentity = await pool.query(
     `SELECT u.* FROM users u JOIN user_identities ui ON u.id = ui.user_id
@@ -75,6 +76,9 @@ async function findOrCreateSSOUser(provider, providerId, email, name, avatarUrl,
 
   // 2. Not found in identities — create new user
   //    (НЕ связываем аккаунты молча по совпадению email)
+  const rl = checkRegLimit(ip);
+  if (!rl.allowed) return { error: 'reg_rate_limit', message: rl.message };
+
   const consentFields = withConsent ? ', consent_accepted_at, consent_version' : '';
   const consentValues = withConsent ? ', NOW(), $4' : '';
   const params = [email?.toLowerCase() || null, name, avatarUrl];
@@ -225,7 +229,10 @@ export async function yandexCallback(req, res) {
     }
 
     // ── LOGIN FLOW ──
-    const result = await findOrCreateSSOUser('yandex', String(profile.id), email, name, avatarUrl, hasConsent);
+    const result = await findOrCreateSSOUser('yandex', String(profile.id), email, name, avatarUrl, hasConsent, req.ip);
+    if (result.error === 'reg_rate_limit') {
+      return res.redirect('/login?error=rate_limit');
+    }
     const token = issueToken(result.user);
 
     console.log(`[sso:yandex] Login: user=${result.user.id} email=${result.user.email} provider_id=${profile.id}`);
@@ -351,7 +358,10 @@ export async function vkCallback(req, res) {
     }
 
     // ── LOGIN FLOW ──
-    const result = await findOrCreateSSOUser('vk', userId, email, name, avatarUrl, hasConsent);
+    const result = await findOrCreateSSOUser('vk', userId, email, name, avatarUrl, hasConsent, req.ip);
+    if (result.error === 'reg_rate_limit') {
+      return res.redirect('/login?error=rate_limit');
+    }
     const token = issueToken(result.user);
 
     console.log(`[sso:vk] Login: user=${result.user.id} email=${result.user.email} provider_id=${userId}`);

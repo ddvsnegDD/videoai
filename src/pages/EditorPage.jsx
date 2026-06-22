@@ -82,6 +82,9 @@ export default function EditorPage() {
   // Regen confirmation
   const [showRegenConfirm, setShowRegenConfirm] = useState(false);
 
+  // Upsell state
+  const [showUpsell, setShowUpsell] = useState(false);
+
   // Load config
   useEffect(() => {
     api.get('/config').then(setConfig).catch(() => {});
@@ -320,6 +323,20 @@ export default function EditorPage() {
     }
   }
 
+  async function handleDownload() {
+    if (!jobId) return;
+    try {
+      const res = await api.get(`/jobs/${jobId}/video`);
+      if (res.clean) {
+        window.open(res.url, '_blank');
+      } else {
+        setShowUpsell(true);
+      }
+    } catch {
+      setShowUpsell(true);
+    }
+  }
+
   function handleContinue() {
     setJobId(null);
     setProjectId(null);
@@ -525,7 +542,7 @@ export default function EditorPage() {
               <ModelCard on={model === 'wan'} onClick={() => setModel('wan')}
                 name="Эконом · Kling 2.5"
                 desc="Клип 5 сек. Жёсткое удержание шрифта и геометрии товара. Формат 9:16."
-                cost={freeWan > 0 ? `${freeWan} бесплатно` : `${config?.video_models?.wan?.credits ?? 40} кредитов`}
+                cost={isFree ? '1 бесплатная' : `${config?.video_models?.wan?.credits ?? 40} кредитов`}
                 accent={C.primary} accentLight={C.primaryLight} accentDark={C.primaryDark} />
               <ModelCard on={model === 'cosmos'} onClick={() => setModel('cosmos')}
                 name="Стандарт · Cosmos"
@@ -535,7 +552,7 @@ export default function EditorPage() {
               <ModelCard on={model === 'veo'} onClick={() => setModel('veo')}
                 name="Премиум · Veo 3.1"
                 desc="Клип 8 секунд. Кинематографичный свет, боке и глубина резкости. Формат 9:16."
-                cost={freeVeo > 0 ? `${freeVeo} бесплатно` : `${config?.video_models?.veo?.credits ?? 90} кредитов`}
+                cost={`${config?.video_models?.veo?.credits ?? 90} кредитов`}
                 accent="#6366F1" accentLight="#EEF2FF" accentDark="#4F46E5" />
             </div>
 
@@ -714,9 +731,23 @@ export default function EditorPage() {
                   <video src={videoUrl} controls autoPlay loop muted playsInline style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
                   <div style={{ position: 'absolute', top: 12, left: 12, background: 'rgba(0,0,0,0.62)', color: '#fff', padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>{model === 'veo' ? 'Veo 3.1 · 8s' : model === 'cosmos' ? 'Cosmos · 7s' : 'Kling 2.5 · 5s'}</div>
                 </div>
-                <a href={videoUrl} download target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
-                  <button style={{ width: '100%', border: 'none', background: C.dark, color: '#fff', padding: 14, borderRadius: 11, fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Download size={16} /> Скачать готовый креатив (MP4)</button>
-                </a>
+                <button onClick={handleDownload} style={{ width: '100%', border: 'none', background: C.dark, color: '#fff', padding: 14, borderRadius: 11, fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Download size={16} /> Скачать готовый креатив (MP4)</button>
+
+                {showUpsell && (
+                  <div style={{ marginTop: 12, background: '#FFFBEB', border: '1px solid #FBD9AE', borderRadius: 12, padding: 16, textAlign: 'center' }}>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: C.dark, marginBottom: 6 }}>Скачать без водяного знака</p>
+                    <p style={{ fontSize: 12.5, color: '#6B7F74', marginBottom: 14, lineHeight: 1.45 }}>
+                      Купите любой пакет кредитов — и все ваши ролики станут доступны для скачивания без водяного знака.
+                    </p>
+                    <button
+                      onClick={() => navigate('/tariffs')}
+                      style={{ background: C.primary, color: '#fff', border: 'none', padding: '11px 28px', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      Выбрать пакет
+                    </button>
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
                   <button onClick={handleContinue} style={{ flex: 1, border: `1.5px solid ${C.primary}`, background: C.primaryLight, color: C.primaryDark, padding: '11px 16px', borderRadius: 10, fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>Продолжить (другой ракурс)</button>
                   <button onClick={handleReset} style={{ border: `1px solid ${C.gray200}`, background: '#fff', color: '#6B7F74', padding: '11px 16px', borderRadius: 10, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>Начать сначала</button>

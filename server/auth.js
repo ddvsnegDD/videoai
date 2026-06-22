@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import pool from './db.js';
 import { sendOTPEmail } from './email.js';
 import { validateNewEmail } from './validateEmail.js';
+import { checkRegLimit } from './rateLimit.js';
 
 if (!process.env.JWT_SECRET) {
   console.error('FATAL: JWT_SECRET environment variable is not set');
@@ -14,10 +15,10 @@ const OTP_EXPIRY_MIN = 10;
 const OTP_RATE_LIMIT_SEC = 60;
 const MAX_ATTEMPTS = 5;
 const JWT_EXPIRY = '30d';
-const WELCOME_CREDITS_EMAIL = Number(process.env.WELCOME_CREDITS_EMAIL) || 10;
+const WELCOME_CREDITS_EMAIL = Number(process.env.WELCOME_CREDITS_EMAIL) || 0;
 const FREE_WAN_EMAIL = parseInt(process.env.FREE_WAN_EMAIL ?? '1', 10);
 const FREE_VEO_EMAIL = parseInt(process.env.FREE_VEO_EMAIL ?? '0', 10);
-const FREE_IMAGE_EMAIL = parseInt(process.env.FREE_IMAGE_EMAIL ?? '1', 10);
+const FREE_IMAGE_EMAIL = parseInt(process.env.FREE_IMAGE_EMAIL ?? '0', 10);
 const CONSENT_VERSION = '2026-06-08';
 
 function generateCode() {
@@ -67,7 +68,7 @@ export async function sendCode(email) {
   return { ok: true };
 }
 
-export async function verifyCode(email, code) {
+export async function verifyCode(email, code, ip) {
   const normalized = email.trim().toLowerCase();
 
   const active = await pool.query(
@@ -104,6 +105,8 @@ export async function verifyCode(email, code) {
   let user = await pool.query(`SELECT * FROM users WHERE email = $1`, [normalized]);
 
   if (user.rows.length === 0) {
+    const rl = checkRegLimit(ip);
+    if (!rl.allowed) return { error: 'reg_rate_limit', message: rl.message };
     isNew = true;
     user = await pool.query(
       `INSERT INTO users (email, credits, free_wan, free_veo, free_image, consent_accepted_at, consent_version) VALUES ($1, $2, $3, $4, $5, NOW(), $6) RETURNING *`,
@@ -150,14 +153,21 @@ export async function getMe(userId) {
   const result = await pool.query(`SELECT * FROM users WHERE id = $1`, [userId]);
   if (result.rows.length === 0) return null;
 
-  const identities = await pool.query(
-    `SELECT provider, provider_id, provider_email, provider_name, created_at
-     FROM user_identities WHERE user_id = $1 ORDER BY created_at`,
-    [userId],
-  );
+  const [identities, paymentsResult] = await Promise.all([
+    pool.query(
+      `SELECT provider, provider_id, provider_email, provider_name, created_at
+       FROM user_identities WHERE user_id = $1 ORDER BY created_at`,
+      [userId],
+    ),
+    pool.query(
+      `SELECT COUNT(*)::int AS cnt FROM payments WHERE user_id = $1 AND status = 'completed'`,
+      [userId],
+    ),
+  ]);
 
   const user = sanitizeUser(result.rows[0]);
   user.identities = identities.rows;
+  user.has_paid = paymentsResult.rows[0].cnt > 0;
   return user;
 }
 

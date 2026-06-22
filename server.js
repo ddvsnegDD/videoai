@@ -102,7 +102,8 @@ app.post('/api/auth/verify', async (req, res) => {
   try {
     const { email, code } = req.body;
     if (!email || !code) return res.status(400).json({ error: 'missing_fields' });
-    const result = await verifyCode(email, code);
+    const result = await verifyCode(email, code, req.ip);
+    if (result.error === 'reg_rate_limit') return res.status(429).json(result);
     if (result.error) return res.status(400).json(result);
     res.cookie('token', result.token, {
       httpOnly: true, secure: process.env.NODE_ENV === 'production',
@@ -679,6 +680,32 @@ app.get('/api/jobs/:id', requireAuth, async (req, res) => {
     res.json({ job });
   } catch (err) {
     console.error('get job error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.get('/api/jobs/:id/video', requireAuth, async (req, res) => {
+  try {
+    const job = await getJob(req.params.id, req.userId);
+    if (!job) return res.status(404).json({ error: 'not_found' });
+    if (job.status !== 'done' || !job.output?.video_url) {
+      return res.status(400).json({ error: 'video_not_ready' });
+    }
+
+    const payResult = await pool.query(
+      `SELECT COUNT(*)::int AS cnt FROM payments WHERE user_id = $1 AND status = 'completed'`,
+      [req.userId],
+    );
+    const hasPaid = payResult.rows[0].cnt > 0;
+
+    if (hasPaid) {
+      const url = job.output.video_url_clean || job.output.video_url;
+      return res.json({ url, clean: true });
+    }
+
+    return res.json({ url: job.output.video_url, clean: false, upsell: true });
+  } catch (err) {
+    console.error('job video error:', err);
     res.status(500).json({ error: 'server_error' });
   }
 });
